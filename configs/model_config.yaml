@@ -1,0 +1,819 @@
+# configs/model_config.yaml
+# =====================================================
+# VeritasFinancial - Banking Fraud Detection System
+# Model Configuration
+# Defines all model architectures, training parameters, and evaluation metrics
+# =====================================================
+
+# --------------------------------------------------------------------
+# Model Selection
+# Primary and ensemble models for fraud detection
+# --------------------------------------------------------------------
+models:
+  
+  # ====================================================================
+  # Classical ML Models (Fast, interpretable)
+  # ====================================================================
+  classical_ml:
+    
+    # XGBoost Model - Primary model
+    xgboost:
+      enabled: true
+      description: "XGBoost classifier for fraud detection"
+      version: "2.0.0"
+      
+      # Model parameters
+      params:
+        objective: "binary:logistic"                    # Binary classification
+        eval_metric: ["aucpr", "logloss", "error"]       # Evaluation metrics
+        max_depth: 6                                      # Tree depth
+        learning_rate: 0.1                                # Step size shrinkage
+        n_estimators: 300                                 # Number of boosting rounds
+        subsample: 0.8                                    # Row sampling
+        colsample_bytree: 0.8                             # Column sampling
+        colsample_bylevel: 0.8                            # Column sampling per level
+        reg_alpha: 1                                      # L1 regularization
+        reg_lambda: 1                                     # L2 regularization
+        gamma: 0                                          # Minimum loss reduction
+        min_child_weight: 1                               # Minimum child weight
+        max_delta_step: 0                                 # Max delta step
+        scale_pos_weight: "auto"                          # Auto-calculate from class imbalance
+        base_score: 0.5                                   # Initial prediction
+        random_state: 42                                  # Random seed
+        n_jobs: -1                                        # Use all CPU cores
+        verbosity: 1                                      # Logging level
+        tree_method: "hist"                               # Histogram-based algorithm
+        grow_policy: "depthwise"                          # Tree growth policy
+        predictor: "cpu_predictor"                         # CPU for inference
+        enable_categorical: true                           # Handle categorical features
+        max_cat_to_onehot: 4                               # One-hot encode low cardinality
+        
+        # GPU settings (if available)
+        gpu:
+          enabled: true
+          gpu_id: 0
+          tree_method: "gpu_hist"
+          predictor: "gpu_predictor"
+        
+        # Early stopping
+        early_stopping_rounds: 50
+        eval_set_ratio: 0.2                                # 20% for validation
+        
+        # Custom loss (for cost-sensitive learning)
+        custom_loss:
+          enabled: true
+          type: "weighted_cross_entropy"
+          fraud_cost: 100                                  # Cost of missing fraud
+          false_positive_cost: 1                           # Cost of false alert
+      
+      # Feature importance
+      feature_importance:
+        method: "gain"                                     # Importance based on gain
+        top_n: 20                                          # Show top 20 features
+        plot: true
+    
+    # LightGBM Model - Fast alternative
+    lightgbm:
+      enabled: true
+      description: "LightGBM classifier - faster training"
+      version: "4.0.0"
+      
+      params:
+        objective: "binary"
+        metric: ["auc", "binary_logloss"]
+        boosting_type: "gbdt"
+        num_leaves: 31                                     # Max leaves in tree
+        max_depth: -1                                       # Unlimited depth
+        learning_rate: 0.1
+        n_estimators: 300
+        subsample: 0.8
+        subsample_freq: 1
+        colsample_bytree: 0.8
+        reg_alpha: 0.1
+        reg_lambda: 0.1
+        min_child_samples: 20
+        min_child_weight: 0.001
+        min_split_gain: 0.0
+        scale_pos_weight: "auto"
+        random_state: 42
+        n_jobs: -1
+        verbose: -1
+        categorical_feature: "auto"
+        
+        # GPU support
+        gpu:
+          enabled: true
+          device_type: "gpu"
+          gpu_platform_id: 0
+          gpu_device_id: 0
+          num_gpu: 1
+        
+        # Early stopping
+        early_stopping_rounds: 50
+        first_metric_only: true
+    
+    # CatBoost Model - Handles categoricals well
+    catboost:
+      enabled: false
+      description: "CatBoost - good for categorical features"
+      version: "1.2.0"
+      
+      params:
+        loss_function: "Logloss"
+        eval_metric: "AUC"
+        iterations: 1000
+        learning_rate: 0.1
+        depth: 6
+        l2_leaf_reg: 3
+        random_seed: 42
+        od_type: "Iter"
+        od_wait: 50
+        task_type: "CPU"
+        devices: "0"
+        border_count: 128
+        feature_border_type: "GreedyLogSum"
+        leaf_estimation_method: "Newton"
+    
+    # Random Forest - Baseline
+    random_forest:
+      enabled: true
+      description: "Random Forest baseline"
+      version: "1.0.0"
+      
+      params:
+        n_estimators: 200
+        max_depth: 10
+        min_samples_split: 10
+        min_samples_leaf: 4
+        max_features: "sqrt"
+        bootstrap: true
+        oob_score: true
+        class_weight: "balanced"
+        random_state: 42
+        n_jobs: -1
+        warm_start: false
+    
+    # Logistic Regression - Interpretable baseline
+    logistic_regression:
+      enabled: true
+      description: "Logistic regression for baseline comparison"
+      version: "1.0.0"
+      
+      params:
+        penalty: "elasticnet"                              # Elastic net regularization
+        C: 1.0                                               # Inverse regularization
+        class_weight: "balanced"
+        solver: "saga"
+        max_iter: 1000
+        multi_class: "ovr"
+        l1_ratio: 0.5                                        # Mix of L1 and L2
+        random_state: 42
+        n_jobs: -1
+  
+  # ====================================================================
+  # Anomaly Detection Models (Unsupervised)
+  # ====================================================================
+  anomaly_detection:
+    
+    # Isolation Forest
+    isolation_forest:
+      enabled: true
+      description: "Isolation Forest for unsupervised anomaly detection"
+      
+      params:
+        n_estimators: 200
+        max_samples: "auto"
+        contamination: 0.01                                   # Expected fraud rate
+        max_features: 1.0
+        bootstrap: false
+        random_state: 42
+        n_jobs: -1
+        warm_start: false
+      
+      # Feature subset for efficiency
+      feature_subset: ["amount", "velocity", "time_features"]
+      
+      # Score calibration
+      calibration:
+        method: "isotonic_regression"
+        calibration_data: "validation"
+    
+    # One-Class SVM
+    one_class_svm:
+      enabled: false
+      description: "One-Class SVM for novelty detection"
+      
+      params:
+        kernel: "rbf"
+        nu: 0.01                                              # Upper bound on outliers
+        gamma: "scale"
+        shrinking: true
+        cache_size: 200
+        max_iter: -1
+    
+    # Autoencoder (Deep Learning)
+    autoencoder:
+      enabled: true
+      description: "Deep autoencoder for reconstruction-based anomaly detection"
+      version: "1.0.0"
+      
+      architecture:
+        input_dim: 200
+        encoding_dims: [128, 64, 32]
+        latent_dim: 16
+        decoding_dims: [32, 64, 128]
+        activation: "relu"
+        output_activation: "sigmoid"
+        dropout_rate: 0.2
+        batch_norm: true
+        
+      training:
+        batch_size: 256
+        epochs: 100
+        learning_rate: 0.001
+        optimizer: "adam"
+        loss: "mse"                                            # Mean squared error
+        validation_split: 0.2
+        early_stopping_patience: 10
+        reduce_lr_patience: 5
+        shuffle: true
+        verbose: 1
+      
+      # Anomaly threshold
+      threshold:
+        method: "percentile"
+        percentile: 95                                         # Top 5% as anomalies
+  
+  # ====================================================================
+  # Deep Learning Models
+  # ====================================================================
+  deep_learning:
+    
+    # Neural Network
+    neural_network:
+      enabled: true
+      description: "Feed-forward neural network"
+      version: "1.0.0"
+      
+      architecture:
+        name: "FraudDetectionNN"
+        input_dim: 200
+        
+        # Hidden layers
+        hidden_layers:
+          - units: 256
+            activation: "relu"
+            dropout: 0.3
+            batch_norm: true
+          - units: 128
+            activation: "relu"
+            dropout: 0.3
+            batch_norm: true
+          - units: 64
+            activation: "relu"
+            dropout: 0.2
+            batch_norm: true
+          - units: 32
+            activation: "relu"
+            dropout: 0.2
+            batch_norm: true
+        
+        # Output layer
+        output_layer:
+          units: 2
+          activation: "softmax"
+        
+        # Weight initialization
+        initialization:
+          method: "xavier_uniform"
+          bias: 0.0
+      
+      training:
+        batch_size: 512
+        epochs: 100
+        learning_rate: 0.001
+        optimizer:
+          name: "adam"
+          beta1: 0.9
+          beta2: 0.999
+          epsilon: 1e-7
+          weight_decay: 1e-4
+        
+        scheduler:
+          name: "one_cycle_lr"
+          max_lr: 0.01
+          pct_start: 0.1
+          anneal_strategy: "cos"
+        
+        loss:
+          name: "cross_entropy"
+          class_weights: "balanced"                            # Handle imbalance
+        
+        regularization:
+          l1_lambda: 1e-5
+          l2_lambda: 1e-4
+          gradient_clip: 1.0
+        
+        early_stopping:
+          monitor: "val_f1"
+          patience: 15
+          mode: "max"
+          restore_best_weights: true
+        
+        checkpoint:
+          monitor: "val_f1"
+          save_best_only: true
+          mode: "max"
+        
+        callbacks:
+          - "tensorboard"
+          - "csv_logger"
+          - "reduce_lr_on_plateau"
+      
+      # GPU settings
+      gpu:
+        enabled: true
+        device_ids: [0, 1]                                     # Multi-GPU
+        mixed_precision: true                                   # FP16 training
+        memory_growth: true
+    
+    # LSTM Model (Sequential)
+    lstm:
+      enabled: true
+      description: "LSTM for sequence modeling of transactions"
+      version: "1.0.0"
+      
+      architecture:
+        input_sequence_length: 10                               # Last 10 transactions
+        feature_dim: 100
+        
+        lstm_layers:
+          - units: 128
+            return_sequences: true
+            dropout: 0.3
+            recurrent_dropout: 0.2
+          - units: 64
+            return_sequences: false
+            dropout: 0.3
+            recurrent_dropout: 0.2
+        
+        dense_layers:
+          - units: 32
+            activation: "relu"
+            dropout: 0.2
+          - units: 16
+            activation: "relu"
+            dropout: 0.2
+        
+        output_units: 2
+        output_activation: "softmax"
+      
+      training:
+        batch_size: 128
+        epochs: 50
+        learning_rate: 0.001
+        optimizer: "adam"
+        loss: "binary_crossentropy"
+    
+    # Transformer Model
+    transformer:
+      enabled: true
+      description: "Transformer for transaction sequence modeling"
+      version: "1.0.0"
+      
+      architecture:
+        max_sequence_length: 20                                 # Max transactions
+        d_model: 128                                             # Embedding dimension
+        n_heads: 8                                               # Attention heads
+        n_layers: 4                                              # Transformer layers
+        d_ff: 512                                                # Feed-forward dimension
+        dropout_rate: 0.1
+        activation: "gelu"
+        
+        # Advanced features
+        use_gqa: true                                            # Grouped Query Attention
+        n_groups: 4                                              # Query groups for GQA
+        use_flash_attention: true                                # Flash Attention
+        use_rope: true                                           # Rotary Position Embeddings
+        use_kv_cache: true                                       # KV cache for inference
+        use_mhc: true                                            # Manifold-Constrained Hyper-Connections
+        
+        # Positional encoding
+        positional_encoding:
+          type: "rotary"
+          max_position: 1000
+      
+      training:
+        batch_size: 64
+        epochs: 50
+        learning_rate: 0.0001
+        optimizer:
+          name: "adamw"
+          weight_decay: 0.01
+        scheduler:
+          name: "warmup_cosine"
+          warmup_steps: 1000
+          max_lr: 0.001
+          min_lr: 1e-6
+
+# --------------------------------------------------------------------
+# Ensemble Configuration
+# Combining multiple models
+# --------------------------------------------------------------------
+ensemble:
+  
+  # Ensemble method
+  method: "stacking"                                            # Stacking ensemble
+  
+  # Base models to include
+  base_models:
+    - xgboost
+    - lightgbm
+    - neural_network
+    - isolation_forest
+  
+  # Meta-model (combines base model outputs)
+  meta_model:
+    type: "logistic_regression"
+    params:
+      C: 1.0
+      max_iter: 1000
+      class_weight: "balanced"
+  
+  # Training
+  training:
+    use_cv: true                                                 # Cross-validation for training base models
+    n_folds: 5
+    random_state: 42
+    
+    # Features for meta-model
+    meta_features:
+      - base_model_probabilities
+      - base_model_predictions
+      - base_model_confidences
+      - transaction_amount
+      - customer_risk_score
+    
+    # Weighted average alternative
+    weighted_average:
+      enabled: true
+      weights:
+        xgboost: 0.4
+        lightgbm: 0.3
+        neural_network: 0.2
+        isolation_forest: 0.1
+
+# --------------------------------------------------------------------
+# Training Configuration
+# Overall training settings
+# --------------------------------------------------------------------
+training:
+  
+  # Train/val/test split
+  data_split:
+    train_ratio: 0.7
+    val_ratio: 0.15
+    test_ratio: 0.15
+    stratify: true
+    random_state: 42
+    
+    # Time-based split (for time series)
+    time_based_split:
+      enabled: true
+      split_date: "2024-06-01"
+  
+  # Cross-validation
+  cross_validation:
+    method: "stratified_kfold"
+    n_folds: 5
+    shuffle: true
+    random_state: 42
+    
+    # Metrics for CV
+    scoring:
+      primary: "f1"
+      secondary: ["roc_auc", "precision", "recall", "average_precision"]
+  
+  # Hyperparameter tuning
+  hyperparameter_tuning:
+    enabled: true
+    method: "optuna"                                              # Optuna for HP tuning
+    n_trials: 100
+    timeout: 3600                                                 # 1 hour max
+    direction: "maximize"
+    metric: "val_f1"
+    
+    # Search spaces for each model
+    search_spaces:
+      xgboost:
+        max_depth: {type: "int", low: 3, high: 10}
+        learning_rate: {type: "float", low: 0.01, high: 0.3}
+        subsample: {type: "float", low: 0.5, high: 1.0}
+        colsample_bytree: {type: "float", low: 0.5, high: 1.0}
+        reg_alpha: {type: "float", low: 0, high: 10}
+        reg_lambda: {type: "float", low: 0, high: 10}
+      
+      lightgbm:
+        num_leaves: {type: "int", low: 10, high: 100}
+        learning_rate: {type: "float", low: 0.01, high: 0.3}
+        feature_fraction: {type: "float", low: 0.5, high: 1.0}
+        bagging_fraction: {type: "float", low: 0.5, high: 1.0}
+        bagging_freq: {type: "int", low: 1, high: 10}
+        lambda_l1: {type: "float", low: 0, high: 10}
+        lambda_l2: {type: "float", low: 0, high: 10}
+    
+    # Early stopping for tuning
+    early_stopping:
+      enabled: true
+      patience: 20
+      min_delta: 0.001
+    
+    # Pruning
+    pruning:
+      enabled: true
+      method: "median"
+      n_startup_trials: 10
+      n_warmup_steps: 10
+      interval_steps: 1
+  
+  # Class imbalance handling
+  class_imbalance:
+    method: "smote"                                               # SMOTE for oversampling
+    
+    smote_params:
+      sampling_strategy: "auto"
+      k_neighbors: 5
+      random_state: 42
+    
+    # Alternative methods
+    alternatives:
+      - "adasyn"                                                  # ADASYN
+      - "random_oversampler"
+      - "class_weight"
+      - "focal_loss"
+    
+    # For deep learning
+    focal_loss:
+      enabled: true
+      alpha: 0.25                                                  # Class weight
+      gamma: 2.0                                                   # Focusing parameter
+  
+  # Training optimizations
+  optimizations:
+    use_early_stopping: true
+    use_model_checkpoint: true
+    use_tensorboard: true
+    use_mixed_precision: true
+    use_parallel_training: true
+    n_jobs: -1
+    
+    # Memory optimizations
+    memory:
+      use_chunking: true
+      chunk_size: 10000
+      use_dask: true
+      dask_n_workers: 4
+
+# --------------------------------------------------------------------
+# Evaluation Configuration
+# Metrics and evaluation strategies
+# --------------------------------------------------------------------
+evaluation:
+  
+  # Primary metrics
+  metrics:
+    - name: "f1_score"
+      average: "binary"
+      pos_label: 1
+    
+    - name: "precision_score"
+      average: "binary"
+    
+    - name: "recall_score"
+      average: "binary"
+    
+    - name: "roc_auc"
+      multi_class: "ovr"
+    
+    - name: "average_precision"
+    
+    - name: "confusion_matrix"
+      normalize: "true"
+    
+    - name: "classification_report"
+      digits: 4
+  
+  # Business metrics
+  business_metrics:
+    - name: "fraud_detection_rate"
+      description: "Percentage of fraud detected"
+    
+    - name: "false_positive_rate"
+      description: "Percentage of legitimate transactions flagged"
+    
+    - name: "cost_savings"
+      fraud_cost: 1000
+      investigation_cost: 50
+      description: "Net savings from fraud detection"
+    
+    - name: "precision_at_k"
+      k: [10, 100, 1000]                                        # Top-k precision
+      description: "Precision in top flagged transactions"
+    
+    - name: "capture_rate_at_threshold"
+      thresholds: [0.5, 0.7, 0.9]
+  
+  # Threshold optimization
+  threshold_optimization:
+    method: "f1_optimal"                                         # Optimize for F1
+    search_range: [0.1, 0.9]
+    step: 0.01
+    
+    alternative_methods:
+      - "cost_based"                                             # Minimize cost
+      - "precision_recall_tradeoff"                              # User-defined tradeoff
+    
+    # Cost-based threshold
+    cost_based:
+      fraud_cost: 100
+      false_positive_cost: 1
+      false_negative_cost: 100
+      true_negative_benefit: 0
+  
+  # Validation strategies
+  validation:
+    - type: "cross_validation"
+      n_folds: 5
+      stratified: true
+    
+    - type: "time_series_cv"
+      n_splits: 5
+      test_size: 30                                              # 30 days
+    
+    - type: "bootstrap"
+      n_iterations: 1000
+      confidence_level: 0.95
+  
+  # Model comparison
+  model_comparison:
+    enabled: true
+    methods:
+      - "paired_ttest"
+      - "wilcoxon"
+      - "mcnemar"
+    significance_level: 0.05
+
+# --------------------------------------------------------------------
+# Explainability Configuration
+# Model interpretation settings
+# --------------------------------------------------------------------
+explainability:
+  
+  # SHAP explanations
+  shap:
+    enabled: true
+    explainer: "tree"                                            # For tree models
+    n_samples: 1000                                              # For summary
+    n_features: 20                                               # Top features
+    
+    plots:
+      - "summary_plot"
+      - "bar_plot"
+      - "waterfall_plot"
+      - "force_plot"
+    
+    # For deep learning
+    deep_explainer:
+      enabled: true
+      method: "gradient"                                          # Gradient-based
+  
+  # LIME explanations
+  lime:
+    enabled: true
+    n_samples: 5000
+    n_features: 10
+    
+  # Feature importance
+  feature_importance:
+    method: "permutation"                                         # Permutation importance
+    n_repeats: 10
+    random_state: 42
+    plot: true
+  
+  # Individual explanations
+  individual_explanations:
+    enabled: true
+    format: "text"                                                # Text explanation
+    include_factors: true                                         # Include risk factors
+    include_recommendations: true                                 # Include recommendations
+    
+    templates:
+      fraud: "This transaction is flagged as fraudulent due to: {factors}. The risk score is {score:.2f}."
+      legitimate: "This transaction appears legitimate. Confidence: {confidence:.2f}."
+
+# --------------------------------------------------------------------
+# Model Registry and Versioning
+# --------------------------------------------------------------------
+model_registry:
+  
+  # Registry backend
+  backend: "mlflow"
+  tracking_uri: "http://localhost:5000"
+  experiment_name: "fraud_detection"
+  
+  # Model versioning
+  versioning:
+    auto_increment: true
+    version_prefix: "v"
+    use_git_hash: true
+  
+  # Model artifacts
+  artifacts:
+    save_format: "pickle"                                         # For sklearn models
+    save_weights_only: false
+    include_preprocessor: true
+    include_feature_names: true
+  
+  # Deployment stages
+  stages:
+    - "development"
+    - "staging"
+    - "production"
+    - "archived"
+  
+  # Model promotion rules
+  promotion_rules:
+    min_f1_score: 0.8
+    min_auc: 0.9
+    max_false_positive_rate: 0.05
+    required_tests_passed: true
+
+# --------------------------------------------------------------------
+# Model Serving Configuration
+# --------------------------------------------------------------------
+serving:
+  
+  # API settings
+  api:
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+    timeout: 30
+    
+    # Endpoints
+    endpoints:
+      - path: "/predict"
+        methods: ["POST"]
+        rate_limit: "100/minute"
+      
+      - path: "/predict_batch"
+        methods: ["POST"]
+        rate_limit: "10/minute"
+      
+      - path: "/explain"
+        methods: ["POST"]
+        rate_limit: "50/minute"
+      
+      - path: "/health"
+        methods: ["GET"]
+    
+    # Authentication
+    auth:
+      enabled: true
+      type: "api_key"
+      header: "X-API-Key"
+  
+  # Batch inference
+  batch:
+    enabled: true
+    schedule: "0 2 * * *"                                         # Daily at 2 AM
+    batch_size: 10000
+    max_workers: 4
+    
+    # Input/Output
+    input_path: "data/batch_input/"
+    output_path: "data/batch_output/"
+    format: "parquet"
+  
+  # Real-time inference
+  realtime:
+    enabled: true
+    max_latency_ms: 100
+    max_batch_size: 32
+    max_queue_size: 1000
+    
+    # Caching
+    cache:
+      enabled: true
+      ttl: 3600                                                  # 1 hour
+      max_size: 10000
+      backend: "redis"
+  
+  # Resource limits
+  resources:
+    cpu_limit: "2"
+    memory_limit: "4Gi"
+    gpu_limit: "1"
+    replica_count: 3
+    max_replicas: 10
+    auto_scaling: true

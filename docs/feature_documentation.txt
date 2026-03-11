@@ -1,0 +1,1053 @@
+================================================================================
+VERITASFINANCIAL - BANKING FRAUD DETECTION SYSTEM
+Feature Engineering Documentation
+================================================================================
+
+Document Version: 1.0.0
+Last Updated: 2024-01-15
+Author: Data Science Team
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. INTRODUCTION
+   1.1 Purpose of Feature Engineering
+   1.2 Feature Categories Overview
+   1.3 Data Sources Used
+
+2. TRANSACTION-BASED FEATURES
+   2.1 Amount Features
+   2.2 Temporal Features
+   2.3 Location Features
+   2.4 Merchant Features
+
+3. CUSTOMER-BASED FEATURES
+   3.1 Demographic Features
+   3.2 Account History Features
+   3.3 Behavioral Patterns
+
+4. DEVICE-BASED FEATURES
+   4.1 Device Fingerprinting
+   4.2 Risk Scores
+   4.3 Historical Device Usage
+
+5. BEHAVIORAL FEATURES
+   5.1 Spending Patterns
+   5.2 Velocity Features
+   5.3 Anomaly Detection Features
+
+6. GRAPH-BASED FEATURES
+   6.1 Network Features
+   6.2 Community Detection
+   6.3 Propagation Scores
+
+7. FEATURE ENGINEERING PIPELINE
+   7.1 Feature Creation Process
+   7.2 Feature Selection
+   7.3 Feature Validation
+
+8. FEATURE STORAGE & SERVING
+   8.1 Online Feature Store
+   8.2 Offline Feature Store
+   8.3 Feature Versioning
+
+9. FEATURE MONITORING
+   9.1 Drift Detection
+   9.2 Importance Tracking
+   9.3 Performance Metrics
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+1.1 Purpose of Feature Engineering
+----------------------------------
+Feature engineering is the process of transforming raw banking transaction data 
+into meaningful features that machine learning models can use to detect 
+fraudulent activities. In VeritasFinancial, feature engineering serves several 
+critical purposes:
+
+1.1.1 Enhanced Model Performance
+- Raw data (amounts, timestamps) alone is insufficient for fraud detection
+- Engineered features capture complex fraud patterns (velocity, deviation, etc.)
+- Improves model precision, recall, and overall F1 score
+
+1.1.2 Business Context Integration
+- Features encode domain knowledge about banking fraud
+- Examples: "unusual_time_flag" captures that fraud often occurs at night
+- "distance_from_home" captures location-based anomalies
+
+1.1.3 Interpretability & Compliance
+- Engineered features are human-understandable
+- Enables explanation to regulators and customers
+- Supports audit trail requirements
+
+1.2 Feature Categories Overview
+------------------------------
+VeritasFinancial organizes features into hierarchical categories based on their 
+source and nature:
+
+┌─────────────────────────────────────────────────────────────┐
+│                    FEATURE CATEGORIES                       │
+├───────────────┬─────────────────────────────────────────────┤
+│ Category      │ Description                                 │
+├───────────────┼─────────────────────────────────────────────┤
+│ Transaction   │ Features derived from individual transaction│
+│               │ amount, time, location, merchant           │
+├───────────────┼─────────────────────────────────────────────┤
+│ Customer      │ Features based on customer profile and     │
+│               │ historical behavior                         │
+├───────────────┼─────────────────────────────────────────────┤
+│ Device        │ Features from device fingerprinting and    │
+│               │ risk assessment                             │
+├───────────────┼─────────────────────────────────────────────┤
+│ Behavioral    │ Features capturing spending patterns and    │
+│               │ deviations from normal behavior            │
+├───────────────┼─────────────────────────────────────────────┤
+│ Graph         │ Features from network relationships between │
+│               │ customers, merchants, and devices          │
+└───────────────┴─────────────────────────────────────────────┘
+
+1.3 Data Sources Used
+---------------------
+VeritasFinancial integrates data from multiple sources:
+
+┌─────────────────────────────────────────────────────────────┐
+│ DATA SOURCES                                                │
+├───────────────┬─────────────────────────────────────────────┤
+│ Source        │ Description                                 │
+├───────────────┼─────────────────────────────────────────────┤
+│ Core Banking  │ Transaction records, customer profiles,    │
+│ System        │ account information                         │
+├───────────────┼─────────────────────────────────────────────┤
+│ Payment       │ Real-time transaction streams, merchant    │
+│ Gateway       │ data, payment methods                       │
+├───────────────┼─────────────────────────────────────────────┤
+│ Device        │ Device fingerprints, IP geolocation,       │
+│ Intelligence  │ browser/OS information                      │
+├───────────────┼─────────────────────────────────────────────┤
+│ External      │ Blacklists, fraud databases, credit bureau │
+│ APIs          │ data, sanctions lists                       │
+├───────────────┼─────────────────────────────────────────────┤
+│ Historical    │ Past transaction data with fraud labels    │
+│ Database      │ for training                                │
+└───────────────┴─────────────────────────────────────────────┘
+
+================================================================================
+2. TRANSACTION-BASED FEATURES
+================================================================================
+
+2.1 Amount Features
+-------------------
+These features transform the raw transaction amount into more informative 
+representations for fraud detection.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: amount_log                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Natural logarithm of transaction amount                        │
+│ Formula: amount_log = log1p(amount)                                         │
+│ Purpose: Handles skewed distribution of amounts; fraud often involves      │
+│          amounts that are orders of magnitude different from normal         │
+│ Data Type: float                                                            │
+│ Range: [0, log1p(max_amount)]                                               │
+│ Example: amount=1000.00 → amount_log=6.91                                   │
+│ Implementation:                                                             │
+│   np.log1p(amount)  # log1p = log(1+amount)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: amount_zscore                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Z-score of amount relative to customer's historical amounts   │
+│ Formula: amount_zscore = (amount - mean_customer_amount) /                  │
+│                          std_customer_amount                                │
+│ Purpose: Detects transactions that deviate significantly from customer's    │
+│          typical spending pattern                                           │
+│ Data Type: float                                                            │
+│ Range: Typically [-3, 3], outliers may exceed                               │
+│ Interpretation: |zscore| > 2 → unusual; |zscore| > 3 → highly unusual      │
+│ Example: Customer avg=100, std=20, amount=500 → zscore=20.0 (fraudulent)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: amount_category                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Categorical representation of amount range                     │
+│ Categories:                                                                 │
+│   - micro: amount < 10                                                      │
+│   - small: 10 ≤ amount < 100                                                │
+│   - medium: 100 ≤ amount < 1000                                             │
+│   - large: 1000 ≤ amount < 10000                                            │
+│   - huge: amount ≥ 10000                                                    │
+│ Purpose: Captures that fraud rates vary by amount category                  │
+│ Data Type: categorical (string)                                             │
+│ Encoding: One-hot encoded for ML models                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: is_high_value                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Binary flag for high-value transactions                        │
+│ Threshold: Configurable, default 10,000 USD                                 │
+│ Formula: is_high_value = 1 if amount > high_value_threshold else 0          │
+│ Purpose: High-value transactions have different fraud patterns              │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.2 Temporal Features
+---------------------
+Features derived from transaction timestamp to capture time-based fraud patterns.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: hour_of_day                                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Hour of day when transaction occurred (0-23)                   │
+│ Source: transaction_time.hour                                               │
+│ Purpose: Fraud rates vary by time of day; many frauds occur at night       │
+│ Data Type: integer                                                          │
+│ Range: 0-23                                                                 │
+│ Implementation:                                                             │
+│   df['hour_of_day'] = pd.to_datetime(df['transaction_time']).dt.hour       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: day_of_week                                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Day of week (0=Monday, 6=Sunday)                               │
+│ Source: transaction_time.dayofweek                                          │
+│ Purpose: Weekend transactions may have different fraud patterns             │
+│ Data Type: integer                                                          │
+│ Range: 0-6                                                                  │
+│ Implementation:                                                             │
+│   df['day_of_week'] = pd.to_datetime(df['transaction_time']).dt.dayofweek  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: is_weekend                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Binary flag for weekend transactions                           │
+│ Formula: is_weekend = 1 if day_of_week in [5,6] else 0                      │
+│ Purpose: Weekend fraud often involves different patterns (online shopping)  │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: hour_sin / hour_cos                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Cyclical encoding of hour using sine and cosine transformations│
+│ Formula: hour_sin = sin(2 * π * hour_of_day / 24)                           │
+│          hour_cos = cos(2 * π * hour_of_day / 24)                           │
+│ Purpose: Captures circular nature of time (23:00 and 00:00 are close)       │
+│ Data Type: float                                                            │
+│ Range: [-1, 1]                                                              │
+│ Implementation:                                                             │
+│   df['hour_sin'] = np.sin(2 * np.pi * df['hour_of_day'] / 24)               │
+│   df['hour_cos'] = np.cos(2 * np.pi * df['hour_of_day'] / 24)               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: time_since_last_tx                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Time elapsed since customer's last transaction (in seconds)    │
+│ Formula: time_since_last_tx = current_time - last_transaction_time          │
+│ Purpose: Very short times between transactions may indicate automated fraud │
+│ Data Type: float (seconds)                                                  │
+│ Range: 0 to infinity                                                        │
+│ Implementation:                                                             │
+│   df['time_since_last_tx'] = df.groupby('customer_id')['transaction_time'] │
+│     .diff().dt.total_seconds()                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: transactions_last_hour                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Number of transactions by same customer in last hour           │
+│ Formula: transactions_last_hour = count(transactions in [now-1H, now])      │
+│ Purpose: High transaction frequency is suspicious (velocity check)          │
+│ Data Type: integer                                                          │
+│ Range: 0 to configurable max                                                │
+│ Implementation:                                                             │
+│   df['transactions_last_hour'] = df.groupby('customer_id').rolling(        │
+│     window='1H', on='transaction_time')['transaction_id'].count()          │
+│     .reset_index(level=0, drop=True)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: transactions_last_day                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Number of transactions by same customer in last 24 hours       │
+│ Formula: transactions_last_day = count(transactions in [now-24H, now])      │
+│ Purpose: Detects unusual daily activity patterns                            │
+│ Data Type: integer                                                          │
+│ Range: 0 to configurable max                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.3 Location Features
+---------------------
+Features that capture geographic aspects of transactions.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: country_risk_score                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk score associated with transaction country                 │
+│ Source: External country risk database                                      │
+│ Purpose: Some countries have higher fraud rates                             │
+│ Data Type: float                                                            │
+│ Range: 0-100 (higher = riskier)                                             │
+│ Example: US=10, Nigeria=85, China=45                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: distance_from_home                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Distance between transaction location and customer's home      │
+│ Formula: Haversine distance(lat_tx, lon_tx, lat_home, lon_home)            │
+│ Purpose: Transactions far from home are suspicious                          │
+│ Data Type: float (kilometers)                                               │
+│ Range: 0 to Earth circumference (~40,000 km)                                │
+│ Implementation:                                                             │
+│   def haversine(lat1, lon1, lat2, lon2):                                   │
+│       R = 6371  # Earth radius in km                                        │
+│       φ1 = np.radians(lat1)                                                 │
+│       φ2 = np.radians(lat2)                                                 │
+│       Δφ = np.radians(lat2 - lat1)                                          │
+│       Δλ = np.radians(lon2 - lon1)                                          │
+│       a = np.sin(Δφ/2)**2 + np.cos(φ1)*np.cos(φ2)*np.sin(Δλ/2)**2          │
+│       c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))                          │
+│       return R * c                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: is_foreign_country                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Binary flag if transaction country differs from customer's     │
+│ Formula: is_foreign = 1 if tx_country != customer_country else 0            │
+│ Purpose: Foreign transactions are riskier                                   │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: velocity_location_change                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Rate of location change between consecutive transactions       │
+│ Formula: distance_between_txs / time_between_txs                            │
+│ Purpose: Impossible travel speeds indicate fraud (card cloning)             │
+│ Data Type: float (km/h)                                                     │
+│ Range: 0 to configurable max                                                │
+│ Interpretation: > 1000 km/h is suspicious (plane speed)                     │
+│                  > 20000 km/h is impossible (missile speed)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.4 Merchant Features
+---------------------
+Features related to the merchant where transaction occurred.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: merchant_risk_score                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Historical fraud rate for this merchant                        │
+│ Formula: merchant_risk_score = fraud_count / total_transactions * 100       │
+│ Purpose: Some merchants have higher fraud rates (high-risk categories)      │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+│ Update: Daily based on recent transactions                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┤
+│ Feature: merchant_category_risk                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk score for merchant category (e.g., electronics, travel)   │
+│ Source: Industry benchmarks + historical data                               │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+│ Example: Electronics=65, Travel=70, Grocery=30, Gas=25                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: customer_merchant_frequency                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: How often customer transacts with this merchant                │
+│ Formula: customer_merchant_frequency = count(prev_txs at this merchant)     │
+│ Purpose: First-time transactions at a merchant are riskier                  │
+│ Data Type: integer                                                          │
+│ Range: 0 to infinity                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+3. CUSTOMER-BASED FEATURES
+================================================================================
+
+3.1 Demographic Features
+-----------------------
+Static features about the customer.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: customer_age                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Age of customer in years                                       │
+│ Source: Customer profile database                                           │
+│ Purpose: Fraud patterns vary by age group                                   │
+│ Data Type: integer                                                          │
+│ Range: 18-120                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: income_level                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Customer income category                                       │
+│ Categories: low, medium, high, ultra-high                                   │
+│ Purpose: Income correlates with spending patterns and fraud exposure        │
+│ Data Type: categorical (string)                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: credit_score_normalized                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Customer credit score normalized to 0-1 range                  │
+│ Formula: credit_score_normalized = (credit_score - min_score) /             │
+│                                    (max_score - min_score)                  │
+│ Purpose: Credit score indicates financial responsibility                    │
+│ Data Type: float                                                            │
+│ Range: 0-1                                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+3.2 Account History Features
+---------------------------
+Features based on customer's account history.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: account_age_days                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Age of customer account in days                                │
+│ Source: account_creation_date                                               │
+│ Purpose: New accounts are riskier (synthetic identity fraud)                │
+│ Data Type: integer                                                          │
+│ Range: 0 to infinity                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: avg_daily_spend                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Average daily spending amount over last 30 days                │
+│ Formula: avg_daily_spend = sum(last_30d_amount) / 30                        │
+│ Purpose: Establishes baseline for anomaly detection                         │
+│ Data Type: float                                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: std_daily_spend                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Standard deviation of daily spending                           │
+│ Formula: std_daily_spend = std(last_30d_amount)                             │
+│ Purpose: Measures variability in spending patterns                          │
+│ Data Type: float                                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+3.3 Behavioral Patterns
+----------------------
+Features capturing customer's behavioral patterns.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: preferred_transaction_hour                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Modal hour when customer typically transacts                    │
+│ Purpose: Transactions outside preferred hours are suspicious                │
+│ Data Type: integer (0-23)                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: preferred_merchant_categories                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Top 3 merchant categories customer transacts with              │
+│ Purpose: Transactions in new categories are riskier                         │
+│ Data Type: list of categories                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+4. DEVICE-BASED FEATURES
+================================================================================
+
+4.1 Device Fingerprinting
+------------------------
+Features derived from device used for transaction.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: device_type                                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Type of device (mobile, desktop, tablet, unknown)              │
+│ Source: User agent string parsing                                           │
+│ Purpose: Mobile vs desktop fraud rates differ                               │
+│ Data Type: categorical                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: os_risk_score                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk score based on operating system                           │
+│ Purpose: Outdated/rare OS versions may be riskier                           │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: browser_risk_score                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk score based on browser                                    │
+│ Purpose: Automated fraud often uses headless browsers                       │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+4.2 Risk Scores
+--------------
+Composite risk scores for devices.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: device_risk_score                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Overall risk score for this device                             │
+│ Components:                                                                 │
+│   - device_type_risk (weight: 0.2)                                          │
+│   - os_risk_score (weight: 0.2)                                             │
+│   - browser_risk_score (weight: 0.2)                                        │
+│   - device_age_risk (weight: 0.1)                                           │
+│   - historical_fraud_rate (weight: 0.3)                                     │
+│ Formula: device_risk_score = Σ(component_i * weight_i)                      │
+│ Purpose: Single score summarizing device risk                               │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+4.3 Historical Device Usage
+--------------------------
+Features tracking device usage patterns.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: is_new_device                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Whether this is first transaction from this device             │
+│ Formula: is_new_device = 1 if no prior transactions with device_id else 0   │
+│ Purpose: New devices are riskier                                            │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: devices_per_customer                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Number of distinct devices used by this customer               │
+│ Purpose: Too many devices may indicate fraud                                │
+│ Data Type: integer                                                          │
+│ Range: 1 to infinity                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+5. BEHAVIORAL FEATURES
+================================================================================
+
+5.1 Spending Patterns
+--------------------
+Features capturing customer spending behavior.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: spending_velocity                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Rate of spending over time                                     │
+│ Formula: spending_velocity = sum(amount_last_3h) / 3                        │
+│ Purpose: Sudden increase in spending rate indicates fraud                   │
+│ Data Type: float                                                            │
+│ Implementation:                                                             │
+│   df['spending_velocity'] = df.groupby('customer_id')['amount']            │
+│     .rolling(window='3H', min_periods=1).sum() / 3                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: category_preference_score                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: How much customer prefers this merchant category               │
+│ Formula: category_preference_score =                                        │
+│          (tx_category / total_txs) * (amount_category / total_amount)       │
+│ Purpose: Transactions in non-preferred categories are suspicious           │
+│ Data Type: float                                                            │
+│ Range: 0-1                                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+5.2 Velocity Features
+--------------------
+Features measuring rate of change in behavior.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: time_pattern_deviation                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Deviation from customer's typical transaction time             │
+│ Formula: time_pattern_deviation =                                           │
+│          min(|hour_of_day - preferred_hour|, 24 - |hour_of_day - preferred_hour|)│
+│ Purpose: Measures how unusual the transaction time is for this customer    │
+│ Data Type: float                                                            │
+│ Range: 0-12 (hours)                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┤
+│ Feature: amount_pattern_deviation                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Deviation from customer's typical amount                        │
+│ Formula: amount_pattern_deviation = |amount - avg_amount| / std_amount      │
+│ Purpose: Measures how unusual the amount is for this customer               │
+│ Data Type: float                                                            │
+│ Range: 0 to infinity                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+5.3 Anomaly Detection Features
+-----------------------------
+Features specifically designed to detect anomalies.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: unusual_time_flag                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Binary flag if transaction time is unusual for this customer   │
+│ Formula: unusual_time_flag = 1 if time_pattern_deviation > threshold        │
+│          else 0                                                             │
+│ Threshold: Configurable, default 3 hours                                    │
+│ Purpose: Quick indicator for time-based anomalies                           │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: unusual_amount_flag                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Binary flag if amount is unusual for this customer             │
+│ Formula: unusual_amount_flag = 1 if amount_pattern_deviation > threshold    │
+│          else 0                                                             │
+│ Threshold: Configurable, default 2                                          │
+│ Purpose: Quick indicator for amount-based anomalies                         │
+│ Data Type: binary (0/1)                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: isolation_forest_score                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Anomaly score from Isolation Forest algorithm                  │
+│ Formula: isolation_forest_score = IF(transaction_features)                  │
+│ Purpose: Unsupervised anomaly detection                                     │
+│ Data Type: float                                                            │
+│ Range: -1 to 1 (lower = more anomalous)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+6. GRAPH-BASED FEATURES
+================================================================================
+
+6.1 Network Features
+-------------------
+Features derived from network relationships.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: customer_network_size                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Size of customer's transaction network (connected merchants)   │
+│ Purpose: Measures how connected the customer is                             │
+│ Data Type: integer                                                          │
+│ Implementation:                                                             │
+│   # Build graph of customer -> merchants                                    │
+│   G = nx.Graph()                                                            │
+│   G.add_edges_from([(cust, merch) for cust, merch in transactions])        │
+│   df['customer_network_size'] = df['customer_id'].map(                      │
+│     lambda c: len(list(G.neighbors(c))))                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+6.2 Community Detection
+----------------------
+Features based on community membership.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: community_id                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: ID of community this customer belongs to in merchant graph     │
+│ Purpose: Fraud often spreads within communities                             │
+│ Data Type: integer                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+6.3 Propagation Scores
+---------------------
+Features measuring risk propagation through network.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: merchant_risk_propagation                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk propagated from connected entities                        │
+│ Formula: merchant_risk_propagation = avg(merchant_risk_score of connected   │
+│          customers)                                                         │
+│ Purpose: If a merchant serves many fraudsters, they might be compromised    │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: device_sharing_score                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Whether multiple customers use this device                     │
+│ Formula: device_sharing_score = number_of_customers_on_device               │
+│ Purpose: Shared devices may indicate fraud rings                            │
+│ Data Type: integer                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Feature: ip_address_risk                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Description: Risk score for IP address                                      │
+│ Factors:                                                                    │
+│   - VPN/proxy usage                                                         │
+│   - TOR exit node                                                           │
+│   - Known malicious IPs                                                     │
+│   - Data center IP (not residential)                                        │
+│ Purpose: IP addresses can indicate fraud                                    │
+│ Data Type: float                                                            │
+│ Range: 0-100                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+7. FEATURE ENGINEERING PIPELINE
+================================================================================
+
+7.1 Feature Creation Process
+---------------------------
+The end-to-end process of creating features:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: Data Collection                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: Raw transaction data, customer data, device data                     │
+│ Output: Unified dataframe with all raw data                                 │
+│ Code:                                                                       │
+│   def collect_data():                                                       │
+│       transactions = read_transactions()                                    │
+│       customers = read_customers()                                          │
+│       devices = read_devices()                                              │
+│       return merge_data(transactions, customers, devices)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: Base Feature Creation                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: Raw data                                                             │
+│ Output: Dataframe with base features                                        │
+│ Operations:                                                                 │
+│   - Extract datetime components (hour, day, month)                          │
+│   - Create amount transformations (log, sqrt, squared)                      │
+│   - Calculate basic ratios and differences                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: Rolling Window Features                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: Base features with timestamps                                        │
+│ Output: Features with rolling statistics                                    │
+│ Operations:                                                                 │
+│   - Group by customer_id                                                    │
+│   - Apply rolling windows (1H, 24H, 7D, 30D)                                │
+│   - Calculate aggregations (count, sum, mean, std, min, max)                │
+│ Code:                                                                       │
+│   windows = ['1H', '24H', '7D', '30D']                                      │
+│   aggs = ['count', 'sum', 'mean', 'std']                                    │
+│   for window in windows:                                                    │
+│       for agg in aggs:                                                      │
+│           df[f'amount_{agg}_{window}'] = df.groupby('customer_id')[         │
+│               'amount'].rolling(window).agg(agg)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: Customer Historical Features                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: Base features                                                         │
+│ Output: Customer-level historical features                                  │
+│ Operations:                                                                 │
+│   - Calculate customer averages by category                                 │
+│   - Find preferred transaction times and locations                          │
+│   - Compute spending patterns                                                │
+│ Code:                                                                       │
+│   customer_stats = df.groupby('customer_id').agg({                          │
+│       'amount': ['mean', 'std', 'median'],                                  │
+│       'hour_of_day': lambda x: mode(x)[0],  # preferred hour               │
+│       'merchant_category': lambda x: x.value_counts().index[0]              │
+│   })                                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: Deviation Features                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: Base features + customer historical features                         │
+│ Output: Deviation scores                                                     │
+│ Operations:                                                                 │
+│   - Calculate z-scores for amounts                                          │
+│   - Compute time deviations                                                  │
+│   - Flag unusual transactions                                                │
+│ Code:                                                                       │
+│   df['amount_zscore'] = (df['amount'] - df['customer_avg_amount']) /        │
+│                          df['customer_std_amount']                          │
+│   df['unusual_amount'] = (df['amount_zscore'].abs() > 2).astype(int)        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 6: Interaction Features                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Input: All existing features                                                │
+│ Output: Feature interactions                                                │
+│ Operations:                                                                 │
+│   - Multiply related features                                               │
+│   - Create ratios between features                                          │
+│   - Combine categorical features                                            │
+│ Code:                                                                       │
+│   df['amount_x_hour'] = df['amount'] * df['hour_sin']                       │
+│   df['amount_per_transaction_rate'] = df['amount'] / (                       │
+│       df['transactions_last_hour'] + 1)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+7.2 Feature Selection
+--------------------
+Process of selecting the most important features.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ METHOD 1: Correlation Analysis                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Remove highly correlated features to reduce multicollinearity      │
+│ Threshold: > 0.95 correlation                                               │
+│ Code:                                                                       │
+│   def remove_highly_correlated(df, threshold=0.95):                         │
+│       corr_matrix = df.corr().abs()                                         │
+│       upper = corr_matrix.where(                                            │
+│           np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)             │
+│       )                                                                     │
+│       to_drop = [col for col in upper.columns if any(upper[col] > threshold)]│
+│       return df.drop(columns=to_drop)                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ METHOD 2: Feature Importance                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Identify most predictive features using model-based importance     │
+│ Models Used: XGBoost, Random Forest                                         │
+│ Code:                                                                       │
+│   model = xgb.XGBClassifier()                                               │
+│   model.fit(X_train, y_train)                                               │
+│   importance = pd.DataFrame({                                               │
+│       'feature': X_train.columns,                                           │
+│       'importance': model.feature_importances_                              │
+│   }).sort_values('importance', ascending=False)                             │
+│   top_features = importance.head(50)['feature'].tolist()                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ METHOD 3: Recursive Feature Elimination                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Select optimal feature subset                                       │
+│ Code:                                                                       │
+│   from sklearn.feature_selection import RFE                                 │
+│   estimator = xgb.XGBClassifier()                                           │
+│   selector = RFE(estimator, n_features_to_select=50, step=10)              │
+│   selector.fit(X_train, y_train)                                            │
+│   selected_features = X_train.columns[selector.support_].tolist()          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+7.3 Feature Validation
+---------------------
+Ensuring features are correctly calculated.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VALIDATION 1: Data Type Validation                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Ensure features have correct data types                            │
+│ Code:                                                                       │
+│   expected_types = {                                                        │
+│       'amount_log': 'float64',                                              │
+│       'hour_of_day': 'int64',                                               │
+│       'is_fraud': 'int64'                                                   │
+│   }                                                                         │
+│   for col, expected_type in expected_types.items():                         │
+│       assert df[col].dtype == expected_type,                                │
+│           f"{col} has type {df[col].dtype}, expected {expected_type}"       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VALIDATION 2: Range Validation                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Ensure features are within expected ranges                         │
+│ Code:                                                                       │
+│   ranges = {                                                                │
+│       'amount_log': (0, 20),                                                │
+│       'hour_of_day': (0, 23),                                               │
+│       'transactions_last_hour': (0, 100)                                    │
+│   }                                                                         │
+│   for col, (min_val, max_val) in ranges.items():                            │
+│       assert df[col].min() >= min_val, f"{col} below minimum"               │
+│       assert df[col].max() <= max_val, f"{col} above maximum"               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VALIDATION 3: Missing Value Validation                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Ensure no unexpected missing values                                │
+│ Code:                                                                       │
+│   missing = df.isnull().sum()                                               │
+│   assert missing.sum() == 0, f"Found {missing.sum()} missing values"        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+8. FEATURE STORAGE & SERVING
+================================================================================
+
+8.1 Online Feature Store
+-----------------------
+Real-time feature serving for inference.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Component: Redis Feature Cache                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Store pre-computed features for low-latency access                 │
+│ Key Structure: feature:{customer_id}:{feature_name}                         │
+│ TTL: 24 hours (configurable)                                                │
+│ Code:                                                                       │
+│   import redis                                                              │
+│   redis_client = redis.Redis(host='localhost', port=6379, db=0)             │
+│                                                                             │
+│   def get_customer_features(customer_id):                                   │
+│       features = {}                                                         │
+│       keys = redis_client.keys(f"feature:{customer_id}:*")                  │
+│       for key in keys:                                                      │
+│           feature_name = key.decode().split(':')[-1]                        │
+│           features[feature_name] = float(redis_client.get(key))             │
+│       return features                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+8.2 Offline Feature Store
+------------------------
+Batch feature storage for training.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Component: Parquet File Storage                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Store historical features for model training                        │
+│ Format: Apache Parquet (columnar, compressed)                               │
+│ Partitioning: By date (transaction_date)                                    │
+│ Code:                                                                       │
+│   # Save features                                                           │
+│   df.to_parquet(                                                            │
+│       'features/transaction_features.parquet',                              │
+│       partition_cols=['transaction_date'],                                  │
+│       compression='snappy'                                                  │
+│   )                                                                         │
+│                                                                             │
+│   # Load features for specific date range                                   │
+│   df = pd.read_parquet(                                                     │
+│       'features/transaction_features.parquet',                              │
+│       filters=[('transaction_date', '>=', '2024-01-01'),                    │
+│                ('transaction_date', '<=', '2024-01-31')]                    │
+│   )                                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+8.3 Feature Versioning
+---------------------
+Tracking feature definitions over time.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Component: Feature Registry                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Track feature definitions, versions, and dependencies              │
+│ Format: YAML configuration file                                             │
+│ Code (feature_registry.yaml):                                               │
+│   features:                                                                 │
+│     amount_log:                                                             │
+│       version: 1.0.0                                                        │
+│       type: float                                                           │
+│       description: "Logarithm of transaction amount"                        │
+│       dependencies: ["amount"]                                              │
+│       created_date: "2024-01-01"                                            │
+│       owner: "data_science_team"                                            │
+│                                                                             │
+│     amount_zscore:                                                          │
+│       version: 1.1.0                                                        │
+│       type: float                                                           │
+│       description: "Z-score of amount relative to customer history"         │
+│       dependencies: ["amount", "customer_avg_amount", "customer_std_amount"]│
+│       created_date: "2024-01-15"                                            │
+│       owner: "data_science_team"                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+9. FEATURE MONITORING
+================================================================================
+
+9.1 Drift Detection
+------------------
+Monitoring feature distributions over time.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Metric: Population Stability Index (PSI)                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Detect distribution shift in features                               │
+│ Formula: PSI = Σ((actual_i - expected_i) * ln(actual_i / expected_i))       │
+│ Interpretation:                                                             │
+│   - PSI < 0.1: No significant drift                                         │
+│   - 0.1 ≤ PSI < 0.25: Moderate drift (investigate)                          │
+│   - PSI ≥ 0.25: Severe drift (retrain needed)                               │
+│ Code:                                                                       │
+│   def calculate_psi(expected, actual, buckets=10):                          │
+│       expected_percents = np.histogram(expected, bins=buckets)[0] / len(expected)│
+│       actual_percents = np.histogram(actual, bins=buckets)[0] / len(actual) │
+│       psi = np.sum((actual_percents - expected_percents) *                   │
+│                    np.log(actual_percents / expected_percents))              │
+│       return psi                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+9.2 Importance Tracking
+----------------------
+Monitoring feature importance over time.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Metric: Feature Importance Stability                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Track if important features remain important                       │
+│ Method: Train weekly models and compare top features                        │
+│ Code:                                                                       │
+│   importance_history = []                                                   │
+│   for week in weeks:                                                        │
+│       model = train_model(week_data)                                        │
+│       importance = pd.Series(                                               │
+│           model.feature_importances_,                                       │
+│           index=feature_names                                               │
+│       ).sort_values(ascending=False)                                        │
+│       importance_history.append(importance)                                 │
+│                                                                             │
+│   # Jaccard similarity between top feature sets                             │
+│   top_features_week1 = set(importance_history[0].head(20).index)           │
+│   top_features_week2 = set(importance_history[1].head(20).index)           │
+│   jaccard = len(top_features_week1 & top_features_week2) /                  │
+│             len(top_features_week1 | top_features_week2)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+9.3 Performance Metrics
+----------------------
+Tracking feature impact on model performance.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Metric: Feature Contribution to Model Performance                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Purpose: Measure how much each feature contributes to model accuracy        │
+│ Method: Ablation study - remove feature and measure performance drop        │
+│ Code:                                                                       │
+│   baseline_score = evaluate_model(X_test, y_test)                           │
+│   contribution_scores = {}                                                  │
+│                                                                             │
+│   for feature in X_test.columns:                                            │
+│       X_test_dropped = X_test.drop(columns=[feature])                       │
+│       score_without = evaluate_model(X_test_dropped, y_test)                │
+│       contribution = baseline_score - score_without                         │
+│       contribution_scores[feature] = contribution                           │
+│                                                                             │
+│   # Flag features with negative contribution (hurt model)                   │
+│   problematic_features = [f for f, c in contribution_scores.items()         │
+│                           if c < -0.01]                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+END OF FEATURE DOCUMENTATION
+================================================================================

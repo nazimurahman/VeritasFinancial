@@ -1,0 +1,53 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Train Model",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/train_model.py",
+            "console": "integratedTerminal",
+            "args": ["--config", "configs/model_config.yaml", "--experiment", "fraud_v1"],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "CUDA_VISIBLE_DEVICES": "0"
+            }
+        },
+        {
+            "name": "Python: Run API Server",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "src.deployment.api.fastapi_app:app",
+                "--reload",
+                "--port", "8000"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "ENVIRONMENT": "development"
+            }
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "Python: Debug Notebook",
+            "type": "python",
+            "request": "launch",
+            "module": "runpy",
+            "args": ["${file}"],
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        }
+    ]
+}

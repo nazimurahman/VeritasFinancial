@@ -1,0 +1,1146 @@
+# configs/deployment_config.yaml
+# =====================================================
+# VeritasFinancial - Banking Fraud Detection System
+# Deployment Configuration
+# Defines production deployment settings
+# =====================================================
+
+# --------------------------------------------------------------------
+# Environment Configuration
+# --------------------------------------------------------------------
+environment:
+  name: "production"                                             # production/staging/development
+  region: "us-west-2"
+  
+  # Environment variables
+  variables:
+    LOG_LEVEL: "INFO"
+    DEBUG: "false"
+    SECRET_KEY: "${SECRET_KEY}"                                  # From environment
+    DATABASE_URL: "${DATABASE_URL}"
+    REDIS_URL: "${REDIS_URL}"
+    MODEL_REGISTRY_URL: "${MLFLOW_TRACKING_URI}"
+
+# --------------------------------------------------------------------
+# API Server Configuration
+# --------------------------------------------------------------------
+api_server:
+  
+  # Server settings
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4                                                     # Number of uvicorn workers
+  timeout: 30                                                    # Request timeout (seconds)
+  
+  # ASGI server
+  asgi:
+    server: "uvicorn"
+    interface: "asgi3"
+    loop: "uvloop"                                               # Fast asyncio
+    http: "httptools"                                            # Fast HTTP parser
+    limit_max_requests: 1000                                     # Max concurrent requests
+    backlog: 2048                                                # Connection backlog
+  
+  # Middleware
+  middleware:
+    cors:
+      enabled: true
+      allow_origins: ["*"]                                        # In production, restrict
+      allow_methods: ["*"]
+      allow_headers: ["*"]
+      allow_credentials: true
+    
+    compression:
+      enabled: true
+      minimum_size: 500                                           # Bytes
+      compression_level: 6                                        # 1-9
+    
+    rate_limiting:
+      enabled: true
+      default_limit: "100/minute"
+      storage: "redis"
+      redis_url: "${REDIS_URL}"
+    
+    authentication:
+      enabled: true
+      type: "jwt"                                                 # JWT tokens
+      jwt_secret: "${JWT_SECRET}"
+      jwt_algorithm: "HS256"
+      token_expiry: 3600                                           # 1 hour
+    
+    logging:
+      enabled: true
+      format: "json"
+      level: "INFO"
+    
+    metrics:
+      enabled: true
+      endpoint: "/metrics"
+      format: "prometheus"
+    
+    tracing:
+      enabled: true
+      service_name: "fraud-detection-api"
+      exporter: "jaeger"
+      jaeger_host: "jaeger"
+      jaeger_port: 6831
+  
+  # Endpoints
+  endpoints:
+    - path: "/api/v1/predict"
+      methods: ["POST"]
+      rate_limit: "1000/minute"
+      timeout: 5
+      auth_required: true
+      cache_ttl: 0                                                # No caching
+    
+    - path: "/api/v1/predict/batch"
+      methods: ["POST"]
+      rate_limit: "100/minute"
+      timeout: 60
+      auth_required: true
+      max_batch_size: 10000
+    
+    - path: "/api/v1/explain"
+      methods: ["POST"]
+      rate_limit: "500/minute"
+      timeout: 10
+      auth_required: true
+    
+    - path: "/api/v1/health"
+      methods: ["GET"]
+      rate_limit: "10000/minute"
+      auth_required: false
+    
+    - path: "/api/v1/metrics"
+      methods: ["GET"]
+      rate_limit: "100/minute"
+      auth_required: true
+      roles: ["admin"]
+    
+    - path: "/api/v1/feedback"
+      methods: ["POST"]
+      rate_limit: "500/minute"
+      auth_required: true
+      description: "Submit feedback for model improvement"
+    
+    - path: "/docs"
+      methods: ["GET"]
+      auth_required: false
+      description: "API documentation"
+
+# --------------------------------------------------------------------
+# Model Serving Configuration
+# --------------------------------------------------------------------
+model_serving:
+  
+  # Model to serve
+  model_name: "fraud_ensemble_v1"
+  model_version: "latest"                                         # "latest", or specific version
+  model_registry: "mlflow"
+  model_registry_uri: "http://mlflow:5000"
+  
+  # Model loading
+  loading:
+    preload: true                                                 # Preload on startup
+    warmup_requests: 10                                           # Send warmup requests
+    fallback_model: "xgboost_v1"                                  # Fallback if primary fails
+    fallback_threshold: 0.9                                        # Confidence threshold
+  
+  # Inference settings
+  inference:
+    batch_size: 32                                                # Batch size for inference
+    max_batch_size: 128
+    max_queue_size: 1000
+    batch_timeout_ms: 10                                          # Max wait to fill batch
+    
+    # Feature preprocessing
+    preprocessing:
+      use_cache: true
+      cache_ttl: 3600
+      cache_backend: "redis"
+    
+    # Prediction
+    prediction:
+      return_proba: true
+      return_explanation: false                                   # For performance
+      return_features: false
+      threshold: 0.5                                               # Default threshold
+    
+    # Performance
+    performance:
+      max_latency_ms: 100
+      target_qps: 1000                                            # Queries per second
+      concurrency: 10
+  
+  # GPU settings
+  gpu:
+    enabled: true
+    device_ids: [0, 1]                                            # Multiple GPUs
+    memory_fraction: 0.8                                          # Use 80% of GPU memory
+    memory_growth: true                                           # TensorFlow memory growth
+    mixed_precision: true                                         # FP16 inference
+  
+  # Model optimization
+  optimization:
+    quantization:
+      enabled: false                                               # Quantization reduces accuracy
+      dtype: "int8"
+    pruning:
+      enabled: false
+    distillation:
+      enabled: false
+    xla:
+      enabled: true                                                # XLA compilation
+    jit:
+      enabled: true                                                # JIT compilation
+      mode: "reduce-overhead"
+
+# --------------------------------------------------------------------
+# Database Configuration
+# --------------------------------------------------------------------
+database:
+  
+  # Primary database (PostgreSQL)
+  postgres:
+    host: "postgres"
+    port: 5432
+    database: "fraudguard"
+    user: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+    min_connections: 5
+    max_connections: 20
+    connection_timeout: 10
+    ssl_mode: "require"
+    
+    # Connection pooling
+    pool:
+      enabled: true
+      pool_size: 10
+      max_overflow: 20
+      pool_recycle: 3600
+      pool_pre_ping: true
+    
+    # Read replica (for read-heavy workloads)
+    read_replica:
+      enabled: true
+      host: "postgres-read"
+      port: 5432
+      weight: 0.7                                                 # 70% of reads to replica
+  
+  # Redis cache
+  redis:
+    host: "redis"
+    port: 6379
+    password: "${REDIS_PASSWORD}"
+    db: 0
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    retry_on_timeout: true
+    max_connections: 50
+    
+    # Sentinel for HA
+    sentinel:
+      enabled: true
+      masters: ["fraudguard-master"]
+      sentinel_hosts: ["redis-sentinel:26379"]
+    
+    # Cluster mode
+    cluster:
+      enabled: false
+      startup_nodes: ["redis-cluster:7000", "redis-cluster:7001"]
+  
+  # Feature store (for ML features)
+  feature_store:
+    type: "redis"                                                 # Online feature store
+    host: "redis-feature"
+    port: 6380
+    ttl: 86400                                                    # 24 hours
+    
+    # Offline feature store
+    offline:
+      type: "s3"
+      bucket: "fraudguard-features"
+      path: "features/"
+      region: "us-west-2"
+      access_key: "${AWS_ACCESS_KEY}"
+      secret_key: "${AWS_SECRET_KEY}"
+  
+  # Vector database (for embeddings)
+  vector_db:
+    type: "pinecone"                                              # Pinecone or Milvus
+    environment: "production"
+    api_key: "${PINECONE_API_KEY}"
+    index_name: "fraud-embeddings"
+    dimension: 128
+    metric: "cosine"
+    pods: 2
+    replicas: 1
+
+# --------------------------------------------------------------------
+# Message Queue Configuration
+# --------------------------------------------------------------------
+message_queue:
+  
+  # Kafka configuration
+  kafka:
+    enabled: true
+    bootstrap_servers: ["kafka-1:9092", "kafka-2:9092", "kafka-3:9092"]
+    client_id: "fraud-detection"
+    
+    # Topics
+    topics:
+      transactions:
+        name: "raw-transactions"
+        partitions: 12
+        replication_factor: 3
+        retention_ms: 604800000                                   # 7 days
+      
+      predictions:
+        name: "fraud-predictions"
+        partitions: 6
+        replication_factor: 3
+      
+      feedback:
+        name: "user-feedback"
+        partitions: 3
+        replication_factor: 3
+      
+      features:
+        name: "computed-features"
+        partitions: 12
+        replication_factor: 3
+        cleanup_policy: "compact"                                 # Keep latest by key
+    
+    # Consumer configuration
+    consumer:
+      group_id: "fraud-detection-group"
+      auto_offset_reset: "latest"
+      enable_auto_commit: true
+      auto_commit_interval_ms: 5000
+      max_poll_records: 500
+      fetch_max_bytes: 52428800                                   # 50MB
+      
+      # For transaction processing
+      isolation_level: "read_committed"                           # For exactly-once
+      session_timeout_ms: 30000
+      heartbeat_interval_ms: 3000
+    
+    # Producer configuration
+    producer:
+      acks: "all"                                                  # Wait for all replicas
+      compression_type: "snappy"
+      linger_ms: 10
+      batch_size: 16384
+      retries: 5
+      max_in_flight_requests_per_connection: 5
+      enable_idempotence: true                                     # Exactly-once semantics
+  
+  # RabbitMQ (alternative)
+  rabbitmq:
+    enabled: false
+    host: "rabbitmq"
+    port: 5672
+    vhost: "/"
+    user: "${RABBITMQ_USER}"
+    password: "${RABBITMQ_PASSWORD}"
+    
+    # Queues
+    queues:
+      transaction_queue:
+        durable: true
+        max_priority: 10
+      prediction_queue:
+        durable: true
+
+# --------------------------------------------------------------------
+# Storage Configuration
+# --------------------------------------------------------------------
+storage:
+  
+  # Local storage
+  local:
+    base_path: "/data"
+    models_path: "/data/models"
+    logs_path: "/data/logs"
+    temp_path: "/data/temp"
+    
+    # Cleanup
+    temp_cleanup_age_days: 7
+    log_retention_days: 30
+  
+  # Cloud storage (S3-compatible)
+  cloud:
+    provider: "aws"                                               # aws/gcp/azure
+    bucket: "fraudguard-prod"
+    region: "us-west-2"
+    access_key: "${AWS_ACCESS_KEY}"
+    secret_key: "${AWS_SECRET_KEY}"
+    
+    # S3 paths
+    paths:
+      models: "models/"
+      data: "data/"
+      logs: "logs/"
+      backups: "backups/"
+      artifacts: "artifacts/"
+    
+    # Lifecycle rules
+    lifecycle:
+      models:
+        transition_ia_days: 30                                    # Move to IA after 30 days
+        transition_glacier_days: 90                               # Move to Glacier after 90
+        expiration_days: 365                                      # Delete after 1 year
+      
+      logs:
+        expiration_days: 90
+  
+  # MinIO (self-hosted S3)
+  minio:
+    enabled: true
+    endpoint: "minio:9000"
+    access_key: "${MINIO_ACCESS_KEY}"
+    secret_key: "${MINIO_SECRET_KEY}"
+    secure: false
+    buckets:
+      - "fraudguard-models"
+      - "fraudguard-data"
+      - "fraudguard-logs"
+
+# --------------------------------------------------------------------
+# Monitoring Configuration
+# --------------------------------------------------------------------
+monitoring:
+  
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    endpoint: "/metrics"
+    port: 9090
+    
+    # Custom metrics
+    metrics:
+      - name: "fraud_predictions_total"
+        type: "counter"
+        labels: ["model", "prediction"]
+      
+      - name: "fraud_prediction_latency_seconds"
+        type: "histogram"
+        buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
+      
+      - name: "fraud_detection_rate"
+        type: "gauge"
+      
+      - name: "false_positive_rate"
+        type: "gauge"
+      
+      - name: "model_confidence"
+        type: "histogram"
+        buckets: [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
+      
+      - name: "active_transactions"
+        type: "gauge"
+      
+      - name: "queue_size"
+        type: "gauge"
+    
+    # Push gateway for batch jobs
+    push_gateway:
+      enabled: true
+      url: "pushgateway:9091"
+  
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    host: "grafana"
+    port: 3000
+    admin_user: "admin"
+    admin_password: "${GRAFANA_PASSWORD}"
+    
+    # Dashboards
+    dashboards:
+      - name: "fraud-detection-overview"
+        path: "monitoring/dashboards/overview.json"
+      
+      - name: "model-performance"
+        path: "monitoring/dashboards/model_performance.json"
+      
+      - name: "business-metrics"
+        path: "monitoring/dashboards/business_metrics.json"
+      
+      - name: "system-health"
+        path: "monitoring/dashboards/system_health.json"
+    
+    # Data sources
+    datasources:
+      - name: "Prometheus"
+        type: "prometheus"
+        url: "http://prometheus:9090"
+        access: "proxy"
+  
+  # Alerting
+  alerting:
+    enabled: true
+    
+    # Alert rules
+    rules:
+      - name: "HighErrorRate"
+        condition: "error_rate > 0.05"
+        duration: "5m"
+        severity: "critical"
+        channels: ["slack", "pagerduty"]
+      
+      - name: "HighLatency"
+        condition: "p99_latency > 1.0"
+        duration: "10m"
+        severity: "warning"
+        channels: ["slack"]
+      
+      - name: "ModelDrift"
+        condition: "feature_drift > 0.1"
+        duration: "1h"
+        severity: "warning"
+        channels: ["slack", "email"]
+      
+      - name: "FraudSpike"
+        condition: "fraud_rate > 0.1"
+        duration: "5m"
+        severity: "critical"
+        channels: ["slack", "pagerduty", "sms"]
+    
+    # Alert channels
+    channels:
+      slack:
+        enabled: true
+        webhook_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#fraud-alerts"
+        username: "FraudGuard"
+      
+      pagerduty:
+        enabled: true
+        service_key: "${PAGERDUTY_KEY}"
+      
+      email:
+        enabled: true
+        smtp_host: "smtp.gmail.com"
+        smtp_port: 587
+        username: "${SMTP_USER}"
+        password: "${SMTP_PASSWORD}"
+        from: "alerts@fraudguard.com"
+        to: ["team@fraudguard.com"]
+      
+      sms:
+        enabled: true
+        provider: "twilio"
+        account_sid: "${TWILIO_ACCOUNT_SID}"
+        auth_token: "${TWILIO_AUTH_TOKEN}"
+        from_number: "${TWILIO_FROM_NUMBER}"
+        to_numbers: ["${ONCALL_NUMBER}"]
+  
+  # Logging
+  logging:
+    level: "INFO"
+    format: "json"
+    
+    # Log aggregation
+    elasticsearch:
+      enabled: true
+      hosts: ["elasticsearch:9200"]
+      index: "fraudguard-logs-%Y.%m.%d"
+    
+    logstash:
+      enabled: true
+      host: "logstash"
+      port: 5000
+    
+    fluentd:
+      enabled: true
+      host: "fluentd"
+      port: 24224
+    
+    # Log retention
+    retention_days: 30
+    
+    # Sensitive data masking
+    masking:
+      enabled: true
+      fields: ["account_number", "credit_card", "ssn", "password"]
+      mask_char: "*"
+      mask_length: 4
+
+# --------------------------------------------------------------------
+# Security Configuration
+# --------------------------------------------------------------------
+security:
+  
+  # Authentication
+  auth:
+    jwt:
+      secret: "${JWT_SECRET}"
+      algorithm: "HS256"
+      expiry_hours: 24
+      refresh_expiry_days: 30
+    
+    oauth2:
+      enabled: true
+      providers:
+        - google
+        - github
+    
+    api_keys:
+      enabled: true
+      header: "X-API-Key"
+      rotation_days: 90
+  
+  # Authorization
+  rbac:
+    enabled: true
+    roles:
+      - name: "admin"
+        permissions: ["*"]
+      
+      - name: "analyst"
+        permissions: ["predict", "explain", "feedback"]
+      
+      - name: "viewer"
+        permissions: ["predict"]
+    
+    default_role: "viewer"
+  
+  # Encryption
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256-GCM"
+      key_rotation_days: 90
+    
+    in_transit:
+      enabled: true
+      tls_version: "1.3"
+      cert_file: "/certs/server.crt"
+      key_file: "/certs/server.key"
+    
+    # Data masking
+    masking:
+      pii_fields: ["account_number", "ssn", "email", "phone"]
+      mask_mode: "partial"                                        # Show last 4 digits
+  
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    default_limit: "100/minute"
+    storage: "redis"
+    
+    # Per-endpoint limits
+    endpoint_limits:
+      "/api/v1/predict": "1000/minute"
+      "/api/v1/predict/batch": "100/minute"
+      "/api/v1/explain": "500/minute"
+    
+    # Per-user limits
+    user_limits:
+      premium: "10000/minute"
+      standard: "1000/minute"
+      free: "100/minute"
+  
+  # IP whitelisting
+  ip_whitelist:
+    enabled: true
+    internal_ranges:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+    
+    api_ranges:
+      - "203.0.113.0/24"
+  
+  # DDoS protection
+  ddos_protection:
+    enabled: true
+    max_requests_per_ip: 1000
+    window_seconds: 60
+    block_duration_minutes: 10
+  
+  # Audit logging
+  audit_log:
+    enabled: true
+    events:
+      - "model_prediction"
+      - "api_access"
+      - "data_access"
+      - "configuration_change"
+      - "user_action"
+    
+    storage: "elasticsearch"
+    retention_days: 365
+
+# --------------------------------------------------------------------
+# Scaling Configuration
+# --------------------------------------------------------------------
+scaling:
+  
+  # Horizontal scaling
+  horizontal:
+    enabled: true
+    min_replicas: 3
+    max_replicas: 20
+    target_cpu_utilization: 70
+    target_memory_utilization: 80
+    target_requests_per_second: 1000
+    
+    # Cooldown periods
+    scale_up_cooldown: 60
+    scale_down_cooldown: 300
+  
+  # Vertical scaling
+  vertical:
+    enabled: true
+    container_requests:
+      cpu: "500m"
+      memory: "1Gi"
+    container_limits:
+      cpu: "2"
+      memory: "4Gi"
+  
+  # Cluster scaling
+  cluster:
+    enabled: true
+    min_nodes: 3
+    max_nodes: 10
+    instance_types: ["t3.large", "c5.xlarge", "g4dn.xlarge"]
+    
+    # Spot instances
+    spot_instances:
+      enabled: true
+      max_price: 0.5                                              # $0.50 per hour
+      instance_families: ["m5", "c5", "r5"]
+  
+  # Load balancing
+  load_balancer:
+    type: "nginx"                                                  # nginx/alb
+    algorithm: "least_conn"
+    health_check_path: "/health"
+    health_check_interval: 10
+    health_check_timeout: 5
+    healthy_threshold: 2
+    unhealthy_threshold: 3
+
+# --------------------------------------------------------------------
+# Backup and Disaster Recovery
+# --------------------------------------------------------------------
+backup:
+  
+  # Backup schedule
+  schedule:
+    full: "0 2 * * 0"                                             # Weekly full backup (Sunday 2 AM)
+    incremental: "0 2 * * 1-6"                                    # Daily incremental
+    
+    retention:
+      daily: 7
+      weekly: 4
+      monthly: 12
+      yearly: 7
+  
+  # Database backup
+  database:
+    enabled: true
+    method: "pg_dump"
+    compression: true
+    encryption: true
+    
+    destinations:
+      - type: "s3"
+        bucket: "fraudguard-backups"
+        path: "database/"
+      - type: "local"
+        path: "/backups/database/"
+  
+  # Model backup
+  models:
+    enabled: true
+    destinations:
+      - type: "s3"
+        bucket: "fraudguard-models-backup"
+        path: "models/"
+  
+  # Disaster recovery
+  disaster_recovery:
+    enabled: true
+    rpo: "24h"                                                     # Recovery Point Objective
+    rto: "4h"                                                      # Recovery Time Objective
+    failover_region: "us-east-1"
+    
+    # DR plan
+    plan:
+      - stage: "detection"
+        timeout: 5
+      - stage: "failover"
+        timeout: 30
+      - stage: "recovery"
+        timeout: 120
+      - stage: "validation"
+        timeout: 30
+      - stage: "failback"
+        timeout: 30
+
+# --------------------------------------------------------------------
+# Kubernetes Deployment
+# --------------------------------------------------------------------
+kubernetes:
+  
+  # Namespace
+  namespace: "fraudguard"
+  
+  # Deployment
+  deployment:
+    strategy: "rollingUpdate"
+    max_surge: 1
+    max_unavailable: 0
+    revision_history_limit: 10
+    
+    # Pod template
+    pod:
+      labels:
+        app: "fraudguard"
+        tier: "api"
+      
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+      
+      security_context:
+        run_as_user: 1000
+        run_as_group: 1000
+        fs_group: 1000
+      
+      containers:
+        - name: "api"
+          image: "fraudguard/api:latest"
+          image_pull_policy: "Always"
+          ports:
+            - containerPort: 8000
+              name: "http"
+            - containerPort: 9090
+              name: "metrics"
+          
+          env_from:
+            - configMapRef:
+                name: "fraudguard-config"
+            - secretRef:
+                name: "fraudguard-secrets"
+          
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"                                   # For GPU nodes
+          
+          livenessProbe:
+            httpGet:
+              path: "/health"
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          
+          volumeMounts:
+            - name: "models"
+              mountPath: "/models"
+            - name: "config"
+              mountPath: "/app/config"
+            - name: "tmp"
+              mountPath: "/tmp"
+      
+      volumes:
+        - name: "models"
+          persistentVolumeClaim:
+            claimName: "models-pvc"
+        - name: "config"
+          configMap:
+            name: "fraudguard-config"
+        - name: "tmp"
+          emptyDir:
+            sizeLimit: "1Gi"
+      
+      nodeSelector:
+        type: "gpu"                                                 # Schedule on GPU nodes
+      
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "app"
+                      operator: "In"
+                      values: ["fraudguard"]
+                topologyKey: "kubernetes.io/hostname"
+  
+  # Service
+  service:
+    type: "ClusterIP"
+    ports:
+      - port: 80
+        targetPort: 8000
+        name: "http"
+      - port: 9090
+        targetPort: 9090
+        name: "metrics"
+  
+  # Ingress
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: "/"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    hosts:
+      - host: "api.fraudguard.com"
+        paths:
+          - path: "/"
+            pathType: "Prefix"
+    
+    tls:
+      - hosts:
+          - "api.fraudguard.com"
+        secretName: "fraudguard-tls"
+  
+  # Horizontal Pod Autoscaler
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    metrics:
+      - type: "Resource"
+        resource:
+          name: "cpu"
+          target:
+            type: "Utilization"
+            averageUtilization: 70
+      - type: "Resource"
+        resource:
+          name: "memory"
+          target:
+            type: "Utilization"
+            averageUtilization: 80
+      - type: "Pods"
+        pods:
+          metric:
+            name: "requests_per_second"
+          target:
+            type: "AverageValue"
+            averageValue: 1000
+  
+  # Pod Disruption Budget
+  pdb:
+    enabled: true
+    minAvailable: 2
+    maxUnavailable: 1
+  
+  # Network Policy
+  network_policy:
+    enabled: true
+    ingress:
+      - from:
+          - namespaceSelector: {}
+        ports:
+          - port: 8000
+          - port: 9090
+    egress:
+      - to:
+          - ipBlock:
+              cidr: "0.0.0.0/0"
+        ports:
+          - port: 443
+          - port: 80
+          - port: 5432
+          - port: 6379
+          - port: 9092
+  
+  # Service Mesh (Istio)
+  service_mesh:
+    enabled: true
+    istio:
+      sidecar_inject: true
+      gateway:
+        enabled: true
+        hosts: ["api.fraudguard.com"]
+        tls:
+          mode: "SIMPLE"
+          credentialName: "fraudguard-tls"
+      
+      virtual_service:
+        enabled: true
+        http:
+          - match:
+              - uri:
+                  prefix: "/api/v1/"
+            route:
+              - destination:
+                  host: "fraudguard-api"
+                  port: 80
+                weight: 100
+            retries:
+              attempts: 3
+              perTryTimeout: "10s"
+            timeout: "30s"
+      
+      destination_rule:
+        enabled: true
+        trafficPolicy:
+          connectionPool:
+            tcp:
+              maxConnections: 100
+              connectTimeout: "30ms"
+            http:
+              http1MaxPendingRequests: 50
+              http2MaxRequests: 100
+              maxRequestsPerConnection: 10
+          outlierDetection:
+            consecutive5xxErrors: 5
+            interval: "30s"
+            baseEjectionTime: "30s"
+            maxEjectionPercent: 50
+
+# --------------------------------------------------------------------
+# CI/CD Pipeline Configuration
+# --------------------------------------------------------------------
+cicd:
+  
+  # Pipeline stages
+  pipeline:
+    stages:
+      - name: "lint"
+        commands: ["ruff check src/", "black --check src/"]
+      
+      - name: "test"
+        commands: ["pytest tests/ -v --cov=src"]
+      
+      - name: "build"
+        commands: ["docker build -t fraudguard:${VERSION} ."]
+      
+      - name: "scan"
+        commands: ["trivy image fraudguard:${VERSION}"]
+      
+      - name: "deploy_dev"
+        commands: ["kubectl apply -f k8s/dev/ -n dev"]
+      
+      - name: "test_integration"
+        commands: ["pytest tests/integration/ -v"]
+      
+      - name: "deploy_staging"
+        commands: ["kubectl apply -f k8s/staging/ -n staging"]
+      
+      - name: "performance_test"
+        commands: ["locust -f tests/performance/locustfile.py --headless"]
+      
+      - name: "deploy_production"
+        commands: ["kubectl apply -f k8s/production/ -n production"]
+        manual_approval: true
+  
+  # Triggers
+  triggers:
+    - branch: "main"
+      stages: ["lint", "test", "build", "scan", "deploy_dev", "test_integration"]
+    
+    - tag: "v*"
+      stages: ["lint", "test", "build", "scan", "deploy_staging", "performance_test", "deploy_production"]
+  
+  # Notifications
+  notifications:
+    slack:
+      webhook: "${SLACK_WEBHOOK}"
+      channel: "#fraudguard-cicd"
+    
+    email:
+      recipients: ["team@fraudguard.com"]
+
+# --------------------------------------------------------------------
+# Cost Management
+# --------------------------------------------------------------------
+cost_management:
+  
+  # Budget alerts
+  budget:
+    monthly_limit: 5000                                           # $5,000 per month
+    alert_thresholds: [50, 80, 90, 100]
+    alert_channels: ["slack", "email"]
+  
+  # Cost optimization
+  optimization:
+    idle_resource_detection: true
+    auto_scale_down_non_prod: true
+    non_prod_schedule: "0 20 * * *"                               # Scale down at 8 PM
+    prod_schedule: "0 7 * * *"                                    # Scale up at 7 AM
+    
+    # Spot instance usage
+    spot_instances:
+      enabled: true
+      max_percentage: 70                                          # Use 70% spot instances
+      instance_types: ["m5.large", "c5.large", "r5.large"]
+  
+  # Resource tagging
+  tagging:
+    enabled: true
+    tags:
+      Project: "FraudGuard"
+      Environment: "${ENV}"
+      Owner: "MLOps"
+      CostCenter: "12345"
+
+# --------------------------------------------------------------------
+# Documentation
+# --------------------------------------------------------------------
+documentation:
+  
+  # API documentation
+  api:
+    enabled: true
+    path: "/docs"
+    format: "openapi"
+    version: "3.0.0"
+    title: "FraudGuard API"
+    description: "Banking Fraud Detection API"
+    servers:
+      - url: "https://api.fraudguard.com"
+        description: "Production"
+      - url: "https://staging-api.fraudguard.com"
+        description: "Staging"
+  
+  # Model documentation
+  models:
+    path: "/models/docs"
+    include_versions: true
+    model_cards: true
+  
+  # Runbooks
+  runbooks:
+    path: "/docs/runbooks"
+    files:
+      - "incident_response.md"
+      - "scaling_procedures.md"
+      - "backup_recovery.md"
+      - "monitoring_alerts.md"

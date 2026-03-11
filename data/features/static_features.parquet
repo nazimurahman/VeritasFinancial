@@ -1,0 +1,15 @@
+"""
+PURPOSE: Store time-invariant features that don't change frequently
+FORMAT: Parquet (columnar storage, compressed, fast I/O)
+CONTENTS:
+- customer_id: Unique identifier
+- age: Customer age at account opening
+- income_bracket: Categorized income level
+- credit_score: FICO score range
+- account_tenure_days: How long account has been active
+- avg_monthly_balance: Historical average balance
+- previous_fraud_flag: Whether customer had fraud before
+- device_count: Number of unique devices used
+- preferred_channel: Primary transaction channel
+- risk_tier: Customer risk classification
+"""

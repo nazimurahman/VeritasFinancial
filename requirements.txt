@@ -1,0 +1,212 @@
+# =============================================================================
+# VERITASFINANCIAL - PRODUCTION DEPENDENCIES
+# =============================================================================
+# This file lists all Python packages required for production deployment
+# Version pinning ensures reproducibility across environments
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CORE DATA SCIENCE STACK (Version 1.x - Stable Releases)
+# -----------------------------------------------------------------------------
+# NumPy: Fundamental package for numerical computing
+# Provides n-dimensional arrays, linear algebra, random number capabilities
+numpy==1.24.3                    # Latest stable with Python 3.10+ support
+
+# Pandas: Data manipulation and analysis
+# Provides DataFrame structures for tabular data
+pandas==2.0.3                     # Includes performance improvements and new features
+
+# SciPy: Scientific computing toolkit
+# Used for statistical tests, optimization, signal processing
+scipy==1.10.1                     # Compatible with numpy 1.24+
+
+# -----------------------------------------------------------------------------
+# MACHINE LEARNING FRAMEWORKS
+# -----------------------------------------------------------------------------
+# Scikit-learn: Classical ML algorithms and utilities
+# Provides preprocessing, model selection, metrics
+scikit-learn==1.3.0               # Latest stable with improved transformers
+
+# XGBoost: Gradient boosting framework
+# Optimized for speed and performance in fraud detection
+xgboost==2.0.0                     # GPU support enabled, faster training
+
+# LightGBM: Lightweight gradient boosting
+# Faster training, lower memory usage than XGBoost
+lightgbm==4.0.0                    # Includes categorical feature support
+
+# CatBoost: Handles categorical features automatically
+# Good for datasets with many categorical variables
+catboost==1.2.0                    # Native categorical feature handling
+
+# Imbalanced-learn: Handle class imbalance
+# SMOTE, ADASYN, and other resampling techniques
+imbalanced-learn==0.11.0           # Essential for fraud (highly imbalanced)
+
+# -----------------------------------------------------------------------------
+# DEEP LEARNING STACK
+# -----------------------------------------------------------------------------
+# PyTorch: Deep learning framework
+# Flexible, dynamic computation graphs
+torch==2.0.1                        # CPU version (use CUDA variant for GPU)
+torchvision==0.15.2                 # Computer vision utilities
+torchaudio==2.0.2                    # Audio processing (optional)
+
+# Transformers: State-of-the-art NLP models
+# For transformer-based sequence modeling in fraud detection
+transformers==4.30.0                # Includes GPT, BERT, RoBERTa models
+
+# SentencePiece: Tokenization for transformers
+# Required for many transformer models
+sentencepiece==0.1.99               # Subword tokenization
+
+# -----------------------------------------------------------------------------
+# FEATURE ENGINEERING & DATA PROCESSING
+# -----------------------------------------------------------------------------
+# Category Encoders: Advanced categorical encoding
+# Target encoding, leave-one-out, etc.
+category-encoders==2.6.0            # Better than one-hot for high cardinality
+
+# tsfresh: Time series feature extraction
+# Automatic feature engineering for time-series data
+tsfresh==0.20.1                      # Extracts 1000+ time series features
+
+# Featuretools: Automated feature engineering
+# Deep feature synthesis for relational data
+featuretools==1.24.0                 # Creates features across entities
+
+# TextBlob: Text processing
+# For analyzing transaction descriptions, merchant names
+textblob==0.17.1                      # Simple NLP for text analysis
+
+# PyArrow: Apache Arrow bindings
+# Efficient data interchange, Parquet support
+pyarrow==12.0.0                       # Fast columnar data processing
+
+# FastParquet: Parquet format support
+# Efficient storage for large datasets
+fastparquet==2023.4.0                 # Alternative parquet implementation
+
+# Dask: Parallel computing
+# Scales pandas to large datasets
+dask==2023.6.0                         # Out-of-core computing
+
+# Polars: Fast DataFrame library
+# Alternative to pandas, written in Rust
+polars==0.18.0                          # Blazing fast data processing
+
+# -----------------------------------------------------------------------------
+# VISUALIZATION & EXPLORATORY ANALYSIS
+# -----------------------------------------------------------------------------
+# Matplotlib: Core plotting library
+# Foundation for most Python visualizations
+matplotlib==3.7.1                       # Publication-quality plots
+
+# Seaborn: Statistical visualizations
+# Built on matplotlib, easier syntax
+seaborn==0.12.2                          # Beautiful statistical plots
+
+# Plotly: Interactive visualizations
+# Web-based, interactive charts
+plotly==5.14.1                            # Dash-compatible, interactive
+
+# Bokeh: Interactive visualizations for web
+# Good for streaming data
+bokeh==3.1.1                               # Real-time dashboard updates
+
+# Yellowbrick: Visual analysis tools
+# ML visualization dashboard
+yellowbrick==1.5.1                          # Model visualization suite
+
+# -----------------------------------------------------------------------------
+# MODEL EXPLAINABILITY & INTERPRETATION
+# -----------------------------------------------------------------------------
+# SHAP: SHapley Additive exPlanations
+# Game-theoretic approach to explain predictions
+shap==0.42.0                                 # Most widely used explanation method
+
+# LIME: Local Interpretable Model-agnostic Explanations
+# Explains individual predictions
+lime==0.2.0.1                                 # Local explanations
+
+# ELI5: Debug machine learning models
+# Inspect model weights, predictions
+eli5==0.13.0                                   # Model debugging
+
+# Interpret: Microsoft's interpretability toolkit
+# Glassbox models, explainable boosting
+interpret==0.4.1                                # EBM (Explainable Boosting Machines)
+
+# -----------------------------------------------------------------------------
+# DATABASE & API INTEGRATION
+# -----------------------------------------------------------------------------
+# SQLAlchemy: SQL toolkit and ORM
+# Database connections, query building
+sqlalchemy==2.0.0                               # Async support, improved performance
+
+# PostgreSQL adapter
+psycopg2-binary==2.9.0                           # PostgreSQL database driver
+
+# Redis client
+# For caching, real-time feature store
+redis==4.5.4                                      # In-memory data structure store
+
+# HTTP requests library
+requests==2.31.0                                   # Simple HTTP client
+
+# FastAPI: Modern web framework
+# For building prediction APIs
+fastapi==0.100.0                                   # High-performance, async support
+
+# Uvicorn: ASGI server
+# Runs FastAPI applications
+uvicorn==0.23.0                                     # Lightning-fast ASGI server
+
+# -----------------------------------------------------------------------------
+# UTILITIES & TOOLING
+# -----------------------------------------------------------------------------
+# Python-dotenv: Environment variables
+# Load configuration from .env files
+python-dotenv==1.0.0                                 # Environment management
+
+# PyYAML: YAML parser
+# Configuration file parsing
+pyyaml==6.0                                           # YAML configuration
+
+# tqdm: Progress bars
+# Visual progress for long operations
+tqdm==4.65.0                                           # Progress bar visualization
+
+# Joblib: Lightweight pipelining
+# Model serialization, parallel computing
+joblib==1.3.0                                           # Efficient model persistence
+
+# Loguru: Logging made simple
+# Better than Python's logging module
+loguru==0.7.0                                            # Pretty, configurable logging
+
+# -----------------------------------------------------------------------------
+# PRODUCTION MONITORING & OBSERVABILITY
+# -----------------------------------------------------------------------------
+# Prometheus client
+# Metrics export for monitoring
+prometheus-client==0.17.0                                 # Production metrics
+
+# Sentry SDK
+# Error tracking and monitoring
+sentry-sdk==1.30.0                                        # Exception tracking
+
+# -----------------------------------------------------------------------------
+# DATA VALIDATION & TESTING
+# -----------------------------------------------------------------------------
+# Great Expectations: Data validation
+# Ensure data quality in pipelines
+great-expectations==0.17.0                                 # Data testing framework
+
+# Pydantic: Data validation
+# Runtime type checking, validation
+pydantic==2.0.0                                             # Data validation library
+
+# =============================================================================
+# END OF requirements.txt
+# =============================================================================

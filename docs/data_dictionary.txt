@@ -1,0 +1,667 @@
+===============================================================================
+VERITAS FINANCIAL - COMPREHENSIVE DATA DICTIONARY
+===============================================================================
+Banking Fraud Detection System
+Version: 1.0.0
+Last Updated: 2024
+===============================================================================
+
+TABLE OF CONTENTS
+===============================================================================
+1. Transaction Data
+2. Customer Profile Data
+3. Device Fingerprint Data
+4. Merchant Data
+5. External Enrichment Data
+6. Derived Features
+7. Label Definitions
+===============================================================================
+
+
+===============================================================================
+1. TRANSACTION DATA
+===============================================================================
+Source Table: banking_transactions
+Update Frequency: Real-time streaming
+Volume: ~10M transactions/day
+
+-------------------------------------------------------------------------------
+Field Name           Type        Nullable    Description
+-------------------------------------------------------------------------------
+transaction_id      string      NO          Unique identifier for each transaction
+                                            Format: TXN_YYYYMMDD_XXXXXXXX
+                                            Example: TXN_20240115_001234567
+
+customer_id         string      NO          Unique customer identifier
+                                            Format: CUST_XXXXXXXX
+                                            Example: CUST_00A1B2C3
+
+account_id          string      NO          Account identifier for source account
+                                            Format: ACC_XXXXXXXXXX
+                                            Example: ACC_1234567890
+
+transaction_time    datetime    NO          Timestamp of transaction in UTC
+                                            Format: YYYY-MM-DD HH:MM:SS
+                                            Example: 2024-01-15 14:30:45
+
+amount             float       NO          Transaction amount in original currency
+                                            Range: 0.01 - 1,000,000.00
+                                            Precision: 2 decimal places
+                                            Example: 1250.75
+
+currency           string      NO          3-letter ISO currency code
+                                            Valid values: USD, EUR, GBP, JPY, CAD, AUD, CHF, CNY
+                                            Example: USD
+
+transaction_type   string      NO          Type of transaction
+                                            Valid values:
+                                            - PURCHASE: Regular purchase
+                                            - WITHDRAWAL: Cash withdrawal
+                                            - TRANSFER: Account transfer
+                                            - PAYMENT: Bill payment
+                                            - REFUND: Transaction refund
+                                            - FEE: Bank fee
+
+merchant_id        string      YES         Merchant identifier (null for non-purchase transactions)
+                                            Format: MCH_XXXXXXXX
+                                            Example: MCH_AMAZON001
+
+merchant_category  string      YES         Merchant category code (MCC)
+                                            Based on ISO 18245 standard
+                                            Examples:
+                                            - 5411: Grocery stores
+                                            - 5812: Restaurants
+                                            - 5651: Clothing stores
+                                            - 4121: Taxicabs/limousines
+
+country           string      NO         2-letter ISO country code where transaction originated
+                                            Format: ISO 3166-1 alpha-2
+                                            Example: US, GB, FR, JP
+
+city              string      YES         City name where transaction originated
+                                            Example: New York, London, Tokyo
+
+ip_address        string      YES         IPv4 or IPv6 address of transaction device
+                                            Format: IPv4: xxx.xxx.xxx.xxx
+                                            Example: 192.168.1.1
+
+device_id         string      YES         Unique identifier for the device used
+                                            Format: DEV_XXXXXXXXXX
+                                            Example: DEV_A1B2C3D4E5
+
+is_fraud          integer     NO          Fraud indicator (target variable)
+                                            0: Legitimate transaction
+                                            1: Confirmed fraud
+
+-------------------------------------------------------------------------------
+Statistical Summary (Transaction Data)
+-------------------------------------------------------------------------------
+Total Records: 28,479,531
+Fraud Rate: 0.172% (49,000 fraudulent transactions)
+Average Transaction Amount: $87.34
+Median Transaction Amount: $22.00
+Max Transaction Amount: $25,691.16
+Min Transaction Amount: $0.01
+===============================================================================
+
+
+===============================================================================
+2. CUSTOMER PROFILE DATA
+===============================================================================
+Source Table: customer_profiles
+Update Frequency: Daily batch
+Total Customers: 2,847,953
+
+-------------------------------------------------------------------------------
+Field Name               Type        Nullable    Description
+-------------------------------------------------------------------------------
+customer_id             string      NO          Customer identifier (joins with transaction data)
+                                                Format: CUST_XXXXXXXX
+                                                Example: CUST_00A1B2C3
+
+account_creation_date   date        NO          Date when customer account was created
+                                                Format: YYYY-MM-DD
+                                                Example: 2019-05-20
+
+customer_age           integer     YES         Age of customer in years
+                                                Range: 18 - 95
+                                                Validation: Must be >= 18
+
+gender                 string      YES         Customer gender
+                                                Valid values: M, F, O (Other), null (prefer not to say)
+
+income_bracket         string      YES         Annual income bracket
+                                                Valid values:
+                                                - LOW: < $30,000
+                                                - MEDIUM_LOW: $30,000 - $50,000
+                                                - MEDIUM: $50,001 - $75,000
+                                                - MEDIUM_HIGH: $75,001 - $100,000
+                                                - HIGH: $100,001 - $150,000
+                                                - VERY_HIGH: > $150,000
+
+credit_score          integer     YES         Credit score (FICO range)
+                                                Range: 300 - 850
+                                                Null indicates no credit history
+
+account_balance       float       NO          Current account balance
+                                                Range: -$10,000 to $1,000,000
+                                                Negative indicates overdraft
+
+avg_monthly_spend     float       YES         Average monthly spending over last 12 months
+                                                Based on transaction history
+
+customer_segment      string      NO          Customer segmentation based on banking behavior
+                                                Valid values:
+                                                - NEW: Account age < 30 days
+                                                - ACTIVE: Regular transaction activity
+                                                - DORMANT: No activity > 90 days
+                                                - HIGH_VALUE: High balance + high spend
+                                                - RISK: Negative balance or high-risk indicators
+
+account_type         string      NO          Type of bank account
+                                                Valid values:
+                                                - CHECKING: Standard checking
+                                                - SAVINGS: Savings account
+                                                - PREMIUM: Premium/wealth management
+                                                - STUDENT: Student account
+                                                - BUSINESS: Business account
+
+verification_level   string      NO          KYC (Know Your Customer) verification level
+                                                Valid values:
+                                                - BASIC: Basic identity verification
+                                                - FULL: Complete KYC documentation
+                                                - ENHANCED: Enhanced due diligence
+
+risk_tier           string      YES          Internal risk classification
+                                                Valid values:
+                                                - LOW: Low risk customer
+                                                - MEDIUM: Medium risk
+                                                - HIGH: High risk
+                                                - BLOCKED: Account blocked
+-------------------------------------------------------------------------------
+===============================================================================
+
+
+===============================================================================
+3. DEVICE FINGERPRINT DATA
+===============================================================================
+Source Table: device_fingerprints
+Update Frequency: Real-time
+Total Devices: 3,521,678
+
+-------------------------------------------------------------------------------
+Field Name               Type        Nullable    Description
+-------------------------------------------------------------------------------
+device_id               string      NO          Unique device identifier
+                                                Format: DEV_XXXXXXXXXX
+                                                Example: DEV_A1B2C3D4E5
+
+device_type            string      NO          Type of device
+                                                Valid values:
+                                                - DESKTOP: Desktop computer
+                                                - LAPTOP: Laptop computer
+                                                - TABLET: Tablet device
+                                                - MOBILE: Mobile phone
+                                                - POS: Point of sale terminal
+                                                - UNKNOWN: Unable to identify
+
+operating_system       string      YES         Operating system name and version
+                                                Examples:
+                                                - Windows 11
+                                                - macOS 14.0
+                                                - iOS 17.2
+                                                - Android 14
+                                                - Linux Ubuntu 22.04
+
+browser               string      YES         Web browser information
+                                                Examples:
+                                                - Chrome 120.0
+                                                - Safari 17.0
+                                                - Firefox 121.0
+                                                - Edge 120.0
+
+screen_resolution     string      YES         Screen resolution in pixels
+                                                Format: WIDTHxHEIGHT
+                                                Example: 1920x1080
+
+timezone             string      YES         Device timezone
+                                                Format: IANA timezone database
+                                                Example: America/New_York
+
+language             string      YES         Device language setting
+                                                Format: ISO 639-1 language code
+                                                Example: en-US, fr-FR
+
+is_mobile_app        boolean     YES         Whether transaction via mobile app
+                                                TRUE: Mobile app
+                                                FALSE: Web browser
+                                                NULL: Unknown
+
+device_risk_score    float       YES         Calculated device risk score (0-100)
+                                                Higher score = higher risk
+                                                Based on:
+                                                - Previous fraud attempts
+                                                - Blacklist status
+                                                - Unusual behavior patterns
+                                                - Proxy/VPN detection
+
+first_seen_date      datetime    NO          First time this device was seen
+                                                Format: YYYY-MM-DD HH:MM:SS
+                                                Example: 2023-01-15 10:30:00
+
+last_seen_date       datetime    NO          Most recent activity from this device
+                                                Format: YYYY-MM-DD HH:MM:SS
+                                                Example: 2024-01-15 14:30:45
+
+is_blacklisted       boolean     NO          Whether device is on blacklist
+                                                TRUE: Blacklisted (block transactions)
+                                                FALSE: Not blacklisted
+
+blacklist_reason     string      YES         Reason for blacklisting
+                                                Valid values:
+                                                - KNOWN_FRAUD: Previous confirmed fraud
+                                                - SUSPICIOUS: Suspicious activity pattern
+                                                - PROXY: Known proxy/VPN
+                                                - REPORTED: Reported by other banks
+-------------------------------------------------------------------------------
+===============================================================================
+
+
+===============================================================================
+4. MERCHANT DATA
+===============================================================================
+Source Table: merchant_profiles
+Update Frequency: Weekly batch
+Total Merchants: 1,245,789
+
+-------------------------------------------------------------------------------
+Field Name               Type        Nullable    Description
+-------------------------------------------------------------------------------
+merchant_id             string      NO          Unique merchant identifier
+                                                Format: MCH_XXXXXXXX
+                                                Example: MCH_AMAZON001
+
+merchant_name           string      NO          Registered business name
+                                                Example: Amazon Web Services Inc.
+
+merchant_category       string      NO          Merchant Category Code (MCC)
+                                                Based on ISO 18245
+                                                Full category list available in external/mcc_codes.csv
+
+merchant_country        string      NO          Country of merchant registration
+                                                Format: ISO 3166-1 alpha-2
+                                                Example: US, GB, CN
+
+merchant_risk_score     float       YES         External merchant risk score (0-100)
+                                                Provided by third-party risk assessment
+                                                Higher score = higher risk
+
+avg_transaction_amount  float       YES         Historical average transaction amount at this merchant
+
+total_transactions      integer     YES         Total number of transactions processed at this merchant
+
+chargeback_rate        float       YES         Percentage of transactions resulting in chargebacks
+                                                Range: 0.00 - 100.00
+                                                Formula: (Chargebacks / Total Transactions) * 100
+
+is_high_risk           boolean     YES         Flag for high-risk merchant categories
+                                                TRUE: High risk (e.g., gambling, adult content)
+                                                FALSE: Low risk
+
+merchant_tenure_days   integer     YES         Days since merchant first appeared in system
+
+verification_status    string      YES         Merchant verification status
+                                                Valid values:
+                                                - VERIFIED: Fully verified
+                                                - PENDING: Verification in progress
+                                                - UNVERIFIED: Not verified
+                                                - SUSPENDED: Suspended due to suspicious activity
+
+-------------------------------------------------------------------------------
+MCC Category Examples
+-------------------------------------------------------------------------------
+MCC Code    Category                    Risk Level
+---------   ------------------------    ----------
+5411        Grocery Stores              Low
+5812        Restaurants                  Medium
+5993        Cigar Stores                 High
+7995        Gambling                     Very High
+4829        Money Transfer               High
+6012        Financial Services           Medium
+-------------------------------------------------------------------------------
+===============================================================================
+
+
+===============================================================================
+5. EXTERNAL ENRICHMENT DATA
+===============================================================================
+Source: Third-party APIs and static datasets
+Update Frequency: Daily
+
+-------------------------------------------------------------------------------
+A. GeoIP Database
+-------------------------------------------------------------------------------
+File: external/geoip_database.csv
+Purpose: IP address geolocation mapping
+
+Field Name           Type        Description
+------------------- ----------   ------------------------------------------------
+ip_range_start       string      Starting IP of range (converted to integer)
+ip_range_end         string      Ending IP of range (converted to integer)
+country_code         string      2-letter country code
+city                string      City name
+latitude            float       Latitude coordinate
+longitude           float       Longitude coordinate
+timezone            string      Timezone of location
+isp                 string      Internet Service Provider
+is_proxy            boolean     Whether IP is a known proxy/VPN
+is_tor              boolean     Whether IP is a Tor exit node
+risk_score          integer     IP reputation score (0-100)
+
+-------------------------------------------------------------------------------
+B. Blacklist Database
+-------------------------------------------------------------------------------
+File: external/blacklist.csv
+Purpose: Known malicious entities
+
+Field Name           Type        Description
+------------------- ----------   ------------------------------------------------
+entity_type         string      Type: IP_ADDRESS, DEVICE_ID, EMAIL, PHONE
+entity_value        string      The actual value (e.g., IP address)
+reason              string      Reason for blacklisting
+source              string      Source of blacklist (e.g., INTERNAL, SHARED)
+timestamp           datetime    When added to blacklist
+expiry_date         datetime    When blacklist entry expires (null = permanent)
+
+-------------------------------------------------------------------------------
+C. Currency Exchange Rates
+-------------------------------------------------------------------------------
+File: external/exchange_rates.csv
+Purpose: Convert transaction amounts to base currency (USD)
+
+Field Name           Type        Description
+------------------- ----------   ------------------------------------------------
+currency_from        string      3-letter source currency
+currency_to          string      3-letter target currency (always USD)
+exchange_rate        float       Conversion rate
+effective_date       date        Date when rate is effective
+source              string       Data source (e.g., ECB, OANDA)
+-------------------------------------------------------------------------------
+===============================================================================
+
+
+===============================================================================
+6. DERIVED FEATURES
+===============================================================================
+Features engineered from raw data for fraud detection models
+
+-------------------------------------------------------------------------------
+Feature Category: Transaction Velocity
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+tx_count_1h                integer     Number of transactions by customer in last 1 hour
+tx_count_24h               integer     Number of transactions by customer in last 24 hours
+tx_count_7d                integer     Number of transactions by customer in last 7 days
+tx_count_30d               integer     Number of transactions by customer in last 30 days
+
+amount_sum_1h              float       Total amount spent by customer in last 1 hour
+amount_sum_24h             float       Total amount spent by customer in last 24 hours
+amount_sum_7d              float       Total amount spent by customer in last 7 days
+amount_mean_7d             float       Average transaction amount over last 7 days
+amount_std_7d              float       Standard deviation of amount over last 7 days
+
+unique_merchants_24h       integer     Number of unique merchants visited in last 24h
+unique_countries_24h       integer     Number of unique countries transacted in last 24h
+
+-------------------------------------------------------------------------------
+Feature Category: Behavioral Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+amount_deviation            float       Deviation from customer's average amount
+                                        Formula: (amount - avg_amount) / avg_amount
+                                        > 2 indicates unusual high amount
+
+time_gap_hours              float       Hours since last transaction by this customer
+                                        Short gaps (<1 hour) may indicate velocity attacks
+                                        Long gaps (>30 days) may indicate dormant account
+
+hour_of_day                 integer     Hour when transaction occurred (0-23)
+                                        High risk hours: 1am-5am (low human activity)
+
+day_of_week                 integer     Day of week (0=Monday, 6=Sunday)
+                                        Weekend transactions may have different patterns
+
+is_weekend                  boolean     TRUE if transaction on Saturday or Sunday
+
+is_night                    boolean     TRUE if transaction between 11pm-5am local time
+
+category_frequency          float       How often customer uses this merchant category
+                                        Low frequency = unusual category
+
+location_distance_km        float       Distance from customer's home location
+                                        >100km may indicate travel or fraud
+
+is_foreign                  boolean     TRUE if transaction country != customer country
+
+-------------------------------------------------------------------------------
+Feature Category: Customer Profile Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+account_age_days            integer     Days since account creation
+                                        New accounts (<30 days) have higher fraud rate
+
+credit_score_normalized     float       Credit score normalized to 0-1 range
+                                        (score - 300) / (850 - 300)
+
+income_level_encoded        integer     Encoded income level (1-6)
+
+balance_to_amount_ratio     float       Account balance / transaction amount
+                                        Low ratio (<0.1) may indicate insufficient funds
+
+avg_monthly_spend_ratio     float       Transaction amount / avg monthly spend
+                                        >0.5 may indicate unusually large transaction
+
+-------------------------------------------------------------------------------
+Feature Category: Device Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+device_risk_score          float       Device risk score (0-100)
+                                        >70 indicates high-risk device
+
+is_new_device              boolean     TRUE if device first seen in last 7 days
+                                        New devices have higher fraud correlation
+
+device_count_customer      integer     Number of devices associated with this customer
+                                        Many devices may indicate account sharing/fraud
+
+is_device_blacklisted      boolean     TRUE if device in blacklist
+
+os_match                   boolean     TRUE if OS matches previous transactions
+                                        Mismatch may indicate device spoofing
+
+-------------------------------------------------------------------------------
+Feature Category: Network/Graph Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+shared_devices_count        integer     Number of other customers using this device
+                                        High count indicates device sharing/mules
+
+ip_risk_score              float       IP reputation score (0-100)
+                                        >70 indicates high-risk IP (proxy, Tor, known fraud)
+
+ip_velocity                integer     Number of customers using this IP in last hour
+                                        High velocity indicates automated attacks
+
+merchant_network_risk      float       Risk propagation through merchant network
+                                        Based on graph analysis of fraud connections
+
+-------------------------------------------------------------------------------
+Feature Category: Temporal Features (Cyclical Encoding)
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+hour_sin                    float       Sine encoding of hour (preserves circular nature)
+                                        hour_sin = sin(2 * π * hour / 24)
+
+hour_cos                    float       Cosine encoding of hour
+                                        hour_cos = cos(2 * π * hour / 24)
+
+month_sin                   float       Sine encoding of month
+                                        month_sin = sin(2 * π * month / 12)
+
+month_cos                   float       Cosine encoding of month
+                                        month_cos = cos(2 * π * month / 12)
+
+-------------------------------------------------------------------------------
+Feature Category: Interaction Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+amount_x_velocity           float       amount * tx_count_1h
+                                        Captures combined effect of high amount + high velocity
+
+risk_score_interaction      float       customer_risk * device_risk * merchant_risk
+                                        Multiplicative risk score
+
+distance_x_amount           float       location_distance_km * amount
+                                        Large distance + large amount = suspicious
+
+-------------------------------------------------------------------------------
+Feature Category: Statistical Features
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+amount_zscore               float       Z-score of amount relative to customer history
+                                        Formula: (amount - μ) / σ
+                                        |zscore| > 3 indicates outlier
+
+amount_percentile           float       Percentile rank of amount in customer history
+                                        Range: 0-1 (0=smallest, 1=largest)
+
+rolling_mean_7d             float       7-day rolling average of transaction amounts
+
+rolling_std_7d              float       7-day rolling standard deviation
+
+exp_rolling_avg_7d          float       Exponentially weighted moving average (decay=0.3)
+                                        More weight to recent transactions
+
+-------------------------------------------------------------------------------
+Feature Category: Text Features (from transaction descriptions)
+-------------------------------------------------------------------------------
+Feature Name                Type        Description
+-------------------------- ----------   -----------------------------------------
+description_length          integer     Length of transaction description in characters
+
+has_urgent_words            boolean     Contains words like "urgent", "immediate", "asap"
+
+has_financial_terms         boolean     Contains financial terms (loan, transfer, wire)
+
+sentiment_score             float       Sentiment analysis score (-1 to 1)
+                                        Negative sentiment may correlate with fraud
+
+fraud_keyword_score         float       Score based on presence of fraud-related keywords
+                                        Words like "verify", "account", "password", "claim"
+===============================================================================
+
+
+===============================================================================
+7. LABEL DEFINITIONS
+===============================================================================
+Target Variable: is_fraud
+
+-------------------------------------------------------------------------------
+Label: 0 - Legitimate Transaction
+-------------------------------------------------------------------------------
+Definition: Transaction confirmed as legitimate with no fraudulent activity
+Source: Customer confirmation, no chargeback, no dispute
+Confidence: High (confirmed by customer or time-passed without dispute)
+
+Examples:
+- Regular purchase at grocery store by cardholder
+- Bill payment from known account
+- Transfer to known beneficiary
+
+-------------------------------------------------------------------------------
+Label: 1 - Confirmed Fraud
+-------------------------------------------------------------------------------
+Definition: Transaction confirmed as fraudulent through investigation
+Source: Customer dispute, chargeback, internal investigation
+Confidence: High (confirmed through investigation)
+
+Sub-categories:
+1. Card Not Present (CNP) Fraud: Online transaction without physical card
+2. Card Present Fraud: Physical card stolen/cloned
+3. Account Takeover: Fraudster gained access to account
+4. Identity Fraud: Synthetic identity used
+5. First-party Fraud: Customer claims fraud (friendly fraud)
+
+Examples:
+- Unauthorized transaction reported by customer
+- Transaction after card reported stolen
+- Transaction from unusual location with pattern matching known fraud
+
+-------------------------------------------------------------------------------
+Label Confidence Levels
+-------------------------------------------------------------------------------
+Confidence Level    Description
+------------------ -------------------------------------------------------------
+HIGH                Confirmed through investigation, chargeback, or customer report
+MEDIUM              Suspicious pattern but not confirmed (e.g., velocity check)
+LOW                 Algorithmic flag, pending review
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+Fraud Label Sources
+-------------------------------------------------------------------------------
+Source Code        Description
+------------------ -------------------------------------------------------------
+CUSTOMER_REPORT    Customer reported fraud directly
+CHARGEBACK         Bank received chargeback from card network
+INTERNAL_REVIEW    Internal fraud team investigation
+VELOCITY_RULE      Flagged by velocity rules (high count of transactions)
+GEO_RULE           Flagged by geographic anomaly
+AMOUNT_RULE        Flagged by amount anomaly
+PATTERN_MATCH      Matched known fraud pattern
+EXTERNAL_ALERT     Alert from fraud sharing network
+-------------------------------------------------------------------------------
+===============================================================================
+
+
+===============================================================================
+DATA GOVERNANCE NOTES
+===============================================================================
+
+Data Retention Policy:
+- Raw transactions: 7 years (regulatory requirement)
+- Customer profiles: Indefinite (until account closure)
+- Device fingerprints: 2 years
+- Derived features: 90 days (for model training)
+- Model predictions: 2 years (for audit trail)
+
+Data Quality Requirements:
+- Completeness: <5% missing values acceptable
+- Accuracy: 99.9% accuracy required for critical fields
+- Timeliness: Real-time for fraud detection (<100ms latency)
+- Consistency: Cross-system validation required
+
+Privacy & Compliance:
+- PII fields: customer_id, name, email, phone (encrypted at rest)
+- GDPR: Right to erasure implemented
+- PCI DSS: Card data never stored in raw format
+- Data masking applied for non-production environments
+
+Update Frequency:
+- Real-time: Transaction data, device fingerprints
+- Hourly: Velocity features
+- Daily: Customer profiles, merchant data
+- Weekly: External enrichment data
+- Monthly: Model retraining
+
+===============================================================================
+END OF DATA DICTIONARY
+===============================================================================

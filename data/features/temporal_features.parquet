@@ -1,0 +1,16 @@
+"""
+PURPOSE: Store time-varying features that change with each transaction
+FORMAT: Parquet with timestamp partitioning
+CONTENTS:
+- transaction_id: Unique transaction identifier
+- timestamp: Transaction time
+- rolling_avg_7d: 7-day rolling average transaction amount
+- transaction_velocity_1h: Number of transactions in last hour
+- time_since_last_tx: Seconds since last transaction
+- amount_zscore: Standardized deviation from customer mean
+- hour_of_day: Transaction hour (0-23)
+- day_of_week: Transaction day (0-6)
+- is_weekend: Weekend flag
+- seasonality_factor: Time-based risk multiplier
+- location_distance: Distance from usual locations
+"""

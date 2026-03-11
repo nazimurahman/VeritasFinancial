@@ -1,0 +1,16 @@
+"""
+PURPOSE: Store network-based features from relationship graphs
+FORMAT: Parquet with adjacency information
+CONTENTS:
+- node_id: Entity identifier (customer/merchant/device)
+- node_type: Type of entity
+- degree_centrality: Number of connections
+- betweenness_centrality: Bridge between communities
+- community_id: Detected fraud ring identifier
+- clustering_coefficient: How connected neighbors are
+- pagerank: PageRank score in transaction network
+- suspicious_connections: Count of risky connections
+- shared_devices: Number of customers sharing device
+- shared_ips: Number of customers sharing IP
+- fraud_propagation_score: Risk from connected entities
+"""

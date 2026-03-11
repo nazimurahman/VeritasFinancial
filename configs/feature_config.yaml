@@ -1,0 +1,897 @@
+# configs/feature_config.yaml
+# =====================================================
+# VeritasFinancial - Banking Fraud Detection System
+# Feature Engineering Configuration
+# Defines all features to be created for fraud detection
+# =====================================================
+
+# --------------------------------------------------------------------
+# Feature Categories
+# Hierarchical organization of features by type
+# --------------------------------------------------------------------
+feature_categories:
+  
+  # ====================================================================
+  # Transaction Features
+  # Features derived directly from transaction data
+  # ====================================================================
+  transaction_features:
+    
+    # Basic transaction features
+    basic_features:
+      - name: amount_log
+        description: "Log-transformed transaction amount"
+        type: numerical
+        transform: "log1p"
+        source_column: "amount"
+        notes: "Handles skewness in amount distribution"
+      
+      - name: amount_sqrt
+        description: "Square root of transaction amount"
+        type: numerical
+        transform: "sqrt"
+        source_column: "amount"
+        notes: "Alternative to log transform"
+      
+      - name: amount_zscore
+        description: "Z-score of amount within customer history"
+        type: numerical
+        transform: "zscore"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "How unusual is this amount for this customer"
+      
+      - name: amount_percentile
+        description: "Percentile of amount in customer history"
+        type: numerical
+        transform: "percentile"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "30D"
+        range: [0, 100]
+        notes: "Where does this amount fall in customer's history"
+      
+      - name: amount_category
+        description: "Categorized transaction amount"
+        type: categorical
+        transform: "binning"
+        source_column: "amount"
+        bins: [0, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 1000000]
+        labels: ["micro", "tiny", "very_small", "small", "medium", "large", "very_large", "huge", "massive", "extreme"]
+        notes: "Human-readable amount categories"
+      
+      - name: is_high_value
+        description: "Flag for high-value transactions"
+        type: binary
+        transform: "threshold"
+        source_column: "amount"
+        threshold: 10000
+        comparison: ">="
+        notes: "Transactions above $10,000"
+      
+      - name: is_low_value
+        description: "Flag for micro transactions"
+        type: binary
+        transform: "threshold"
+        source_column: "amount"
+        threshold: 5
+        comparison: "<="
+        notes: "Transactions below $5 (often test transactions)"
+      
+      - name: currency_factor
+        description: "Numerical factor for currency"
+        type: numerical
+        transform: "mapping"
+        source_column: "currency"
+        mapping:
+          USD: 1.0
+          EUR: 1.1
+          GBP: 1.3
+          JPY: 0.009
+          CAD: 0.75
+        notes: "Relative value compared to USD"
+    
+    # Transaction patterns
+    pattern_features:
+      - name: transaction_velocity_1h
+        description: "Number of transactions in last hour"
+        type: numerical
+        transform: "rolling_count"
+        source_column: "transaction_id"
+        group_by: "customer_id"
+        window: "1H"
+        notes: "Rate of transactions"
+      
+      - name: transaction_velocity_24h
+        description: "Number of transactions in last 24 hours"
+        type: numerical
+        transform: "rolling_count"
+        source_column: "transaction_id"
+        group_by: "customer_id"
+        window: "24H"
+        notes: "Daily transaction count"
+      
+      - name: transaction_velocity_7d
+        description: "Number of transactions in last 7 days"
+        type: numerical
+        transform: "rolling_count"
+        source_column: "transaction_id"
+        group_by: "customer_id"
+        window: "7D"
+        notes: "Weekly transaction count"
+      
+      - name: unique_merchants_24h
+        description: "Number of unique merchants in last 24h"
+        type: numerical
+        transform: "rolling_nunique"
+        source_column: "merchant_id"
+        group_by: "customer_id"
+        window: "24H"
+        notes: "Merchant diversity"
+      
+      - name: unique_countries_24h
+        description: "Number of unique countries in last 24h"
+        type: numerical
+        transform: "rolling_nunique"
+        source_column: "country_code"
+        group_by: "customer_id"
+        window: "24H"
+        notes: "Geographic diversity - high value suspicious"
+      
+      - name: transaction_amount_acceleration
+        description: "Rate of change in transaction amounts"
+        type: numerical
+        transform: "rolling_derivative"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "5"
+        order: 1
+        notes: "How quickly spending is increasing"
+      
+      - name: transaction_frequency_acceleration
+        description: "Rate of change in transaction frequency"
+        type: numerical
+        transform: "rolling_derivative"
+        source_column: "transaction_velocity_1h"
+        group_by: "customer_id"
+        window: "5"
+        order: 1
+        notes: "How quickly transaction rate is changing"
+    
+    # Time-based transaction features
+    temporal_transaction_features:
+      - name: hour_of_day
+        description: "Hour when transaction occurred"
+        type: cyclical
+        transform: "datetime_component"
+        source_column: "transaction_date"
+        component: "hour"
+        notes: "0-23 hour of day"
+      
+      - name: hour_sin
+        description: "Sine of hour for cyclical encoding"
+        type: numerical
+        transform: "sin_transform"
+        source_column: "hour_of_day"
+        period: 24
+        notes: "Preserves circular nature of time"
+      
+      - name: hour_cos
+        description: "Cosine of hour for cyclical encoding"
+        type: numerical
+        transform: "cos_transform"
+        source_column: "hour_of_day"
+        period: 24
+        notes: "Preserves circular nature of time"
+      
+      - name: day_of_week
+        description: "Day of week (0=Monday, 6=Sunday)"
+        type: cyclical
+        transform: "datetime_component"
+        source_column: "transaction_date"
+        component: "dayofweek"
+        notes: "Day of week"
+      
+      - name: day_sin
+        description: "Sine of day for cyclical encoding"
+        type: numerical
+        transform: "sin_transform"
+        source_column: "day_of_week"
+        period: 7
+        notes: "Preserves weekly cycle"
+      
+      - name: day_cos
+        description: "Cosine of day for cyclical encoding"
+        type: numerical
+        transform: "cos_transform"
+        source_column: "day_of_week"
+        period: 7
+      
+      - name: is_weekend
+        description: "Whether transaction occurred on weekend"
+        type: binary
+        transform: "is_in"
+        source_column: "day_of_week"
+        values: [5, 6]
+        notes: "Weekend transactions may have different patterns"
+      
+      - name: time_since_last_tx_seconds
+        description: "Seconds since last transaction"
+        type: numerical
+        transform: "time_diff"
+        source_column: "transaction_date"
+        group_by: "customer_id"
+        diff_unit: "seconds"
+        notes: "Time gap between transactions"
+      
+      - name: time_since_last_tx_hours
+        description: "Hours since last transaction"
+        type: numerical
+        transform: "time_diff"
+        source_column: "transaction_date"
+        group_by: "customer_id"
+        diff_unit: "hours"
+      
+      - name: time_since_last_tx_days
+        description: "Days since last transaction"
+        type: numerical
+        transform: "time_diff"
+        source_column: "transaction_date"
+        group_by: "customer_id"
+        diff_unit: "days"
+      
+      - name: time_since_account_open_days
+        description: "Days since account was opened"
+        type: numerical
+        transform: "time_diff"
+        source_column: "transaction_date"
+        reference_column: "account_open_date"
+        diff_unit: "days"
+        notes: "Account age at transaction time"
+      
+      - name: is_first_transaction
+        description: "Whether this is customer's first transaction"
+        type: binary
+        transform: "is_first"
+        source_column: "transaction_date"
+        group_by: "customer_id"
+        notes: "First transactions are higher risk"
+    
+    # Merchant-related features
+    merchant_features:
+      - name: merchant_risk_score
+        description: "Pre-computed risk score for merchant"
+        type: numerical
+        transform: "direct"
+        source_column: "merchant_risk_level"
+        mapping:
+          Low: 0.1
+          Medium: 0.5
+          High: 0.9
+        notes: "Risk level from merchant database"
+      
+      - name: mcc_risk_score
+        description: "Risk score based on MCC code"
+        type: numerical
+        transform: "direct"
+        source_column: "mcc_risk_score"
+        range: [0, 1]
+        notes: "High-risk MCC codes"
+      
+      - name: is_high_risk_mcc
+        description: "Flag for high-risk merchant category"
+        type: binary
+        transform: "threshold"
+        source_column: "mcc_risk_score"
+        threshold: 0.7
+        comparison: ">="
+      
+      - name: merchant_transaction_velocity
+        description: "Transactions at this merchant in last hour"
+        type: numerical
+        transform: "rolling_count"
+        source_column: "transaction_id"
+        group_by: "merchant_id"
+        window: "1H"
+        notes: "How busy is this merchant"
+      
+      - name: avg_merchant_amount
+        description: "Average transaction amount for this merchant"
+        type: numerical
+        transform: "global_mean"
+        source_column: "amount"
+        group_by: "merchant_id"
+        notes: "Typical amount at this merchant"
+      
+      - name: amount_vs_merchant_avg
+        description: "Ratio of current amount to merchant average"
+        type: numerical
+        transform: "ratio"
+        numerator: "amount"
+        denominator: "avg_merchant_amount"
+        notes: "How unusual is this amount for this merchant"
+  
+  # ====================================================================
+  # Location Features
+  # Geographic and location-based features
+  # ====================================================================
+  location_features:
+    
+    # Distance features
+    distance_features:
+      - name: distance_from_home_km
+        description: "Distance from customer's home location"
+        type: numerical
+        transform: "haversine_distance"
+        lat1_column: "location_latitude"
+        lon1_column: "location_longitude"
+        lat2_column: "home_latitude"
+        lon2_column: "home_longitude"
+        notes: "How far from home"
+      
+      - name: distance_from_usual_location_km
+        description: "Distance from customer's usual transaction location"
+        type: numerical
+        transform: "distance_from_cluster"
+        source_columns: ["location_latitude", "location_longitude"]
+        group_by: "customer_id"
+        cluster_method: "dbscan"
+        eps: 50  # km
+        min_samples: 5
+        notes: "Distance from where customer usually transacts"
+      
+      - name: is_foreign_country
+        description: "Whether transaction is in different country"
+        type: binary
+        transform: "comparison"
+        source_column: "country_code"
+        reference_column: "home_country"
+        comparison: "!="
+        notes: "International transaction"
+      
+      - name: country_risk_score
+        description: "Risk score for the country"
+        type: numerical
+        transform: "direct"
+        source_column: "country_risk_score"
+        mapping_file: "data/external/country_risk_scores.csv"
+        range: [0, 1]
+        notes: "Based on fraud rates by country"
+      
+      - name: city_risk_score
+        description: "Risk score for the city"
+        type: numerical
+        transform: "direct"
+        source_column: "city_risk_score"
+        mapping_file: "data/external/city_risk_scores.csv"
+        range: [0, 1]
+    
+    # Location velocity features
+    location_velocity_features:
+      - name: location_change_count_24h
+        description: "Number of location changes in 24h"
+        type: numerical
+        transform: "rolling_nunique"
+        source_column: "country_code"
+        group_by: "customer_id"
+        window: "24H"
+        notes: "How many different locations"
+      
+      - name: max_distance_traveled_24h
+        description: "Maximum distance between consecutive transactions"
+        type: numerical
+        transform: "rolling_max_distance"
+        source_columns: ["location_latitude", "location_longitude"]
+        group_by: "customer_id"
+        window: "24H"
+        notes: "Maximum distance traveled between transactions"
+      
+      - name: impossible_travel_flag
+        description: "Flag for impossible travel between transactions"
+        type: binary
+        transform: "impossible_travel"
+        source_columns: ["location_latitude", "location_longitude", "transaction_date"]
+        group_by: "customer_id"
+        max_speed_kmh: 1000  # Commercial flight speed
+        notes: "Transactions that couldn't happen given time between them"
+      
+      - name: timezone_mismatch
+        description: "Whether transaction time matches location timezone"
+        type: binary
+        transform: "timezone_check"
+        source_column: "transaction_date"
+        location_column: "country_code"
+        tolerance_hours: 3
+        notes: "Transactions at unusual hours for location"
+  
+  # ====================================================================
+  # Behavioral Features
+  # Customer behavior patterns
+  # ====================================================================
+  behavioral_features:
+    
+    # Spending patterns
+    spending_patterns:
+      - name: avg_daily_spend
+        description: "Average daily spending amount"
+        type: numerical
+        transform: "rolling_mean"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Baseline spending level"
+      
+      - name: std_daily_spend
+        description: "Standard deviation of daily spending"
+        type: numerical
+        transform: "rolling_std"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Spending variability"
+      
+      - name: spending_velocity
+        description: "Current spending rate"
+        type: numerical
+        transform: "rolling_sum"
+        source_column: "amount"
+        group_by: "customer_id"
+        window: "1H"
+        notes: "How fast are they spending now"
+      
+      - name: spending_acceleration
+        description: "Change in spending rate"
+        type: numerical
+        transform: "derivative"
+        source_column: "spending_velocity"
+        group_by: "customer_id"
+        order: 1
+        notes: "Is spending accelerating"
+      
+      - name: amount_deviation_from_avg
+        description: "How much amount deviates from average"
+        type: numerical
+        transform: "deviation"
+        source_column: "amount"
+        reference_column: "avg_daily_spend"
+        notes: "Z-score-like deviation"
+      
+      - name: amount_deviation_score
+        description: "Normalized deviation score"
+        type: numerical
+        transform: "normalized_deviation"
+        source_column: "amount"
+        mean_column: "avg_daily_spend"
+        std_column: "std_daily_spend"
+        notes: "How many standard deviations from mean"
+      
+      - name: is_unusual_amount
+        description: "Flag for unusual transaction amount"
+        type: binary
+        transform: "threshold"
+        source_column: "amount_deviation_score"
+        threshold: 3
+        comparison: ">="
+        notes: "Amount is 3+ std dev from mean"
+    
+    # Category preferences
+    category_preferences:
+      - name: preferred_category
+        description: "Most frequent transaction category"
+        type: categorical
+        transform: "mode"
+        source_column: "merchant_category"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Customer's preferred spending category"
+      
+      - name: category_share
+        description: "Share of spending in this category"
+        type: numerical
+        transform: "category_ratio"
+        source_column: "merchant_category"
+        amount_column: "amount"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "What % of spending in this category"
+      
+      - name: category_transition_probability
+        description: "Probability of transitioning to this category"
+        type: numerical
+        transform: "markov_transition"
+        source_column: "merchant_category"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Based on Markov chains"
+      
+      - name: unusual_category_flag
+        description: "Flag for unusual category for this customer"
+        type: binary
+        transform: "is_unusual_category"
+        source_column: "merchant_category"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Customer rarely shops in this category"
+    
+    # Time patterns
+    time_patterns:
+      - name: preferred_hour
+        description: "Most common transaction hour"
+        type: numerical
+        transform: "circular_mode"
+        source_column: "hour_of_day"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "When customer usually transacts"
+      
+      - name: time_pattern_deviation
+        description: "Deviation from usual transaction time"
+        type: numerical
+        transform: "circular_deviation"
+        source_column: "hour_of_day"
+        reference_column: "preferred_hour"
+        notes: "How far from usual time"
+      
+      - name: unusual_time_flag
+        description: "Flag for transaction at unusual hour"
+        type: binary
+        transform: "threshold"
+        source_column: "time_pattern_deviation"
+        threshold: 4  # hours
+        comparison: ">="
+        notes: "Transaction at unusual hour"
+      
+      - name: weekend_ratio
+        description: "Ratio of weekend to weekday transactions"
+        type: numerical
+        transform: "ratio"
+        source_column: "is_weekend"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "How often customer shops on weekends"
+  
+  # ====================================================================
+  # Device Features
+  # Device fingerprinting and risk
+  # ====================================================================
+  device_features:
+    
+    # Basic device features
+    basic_device_features:
+      - name: device_risk_score
+        description: "Pre-computed device risk score"
+        type: numerical
+        transform: "direct"
+        source_column: "risk_score"
+        range: [0, 1]
+        notes: "From device fingerprinting system"
+      
+      - name: os_risk_score
+        description: "Risk score based on OS"
+        type: numerical
+        transform: "mapping"
+        source_column: "os_family"
+        mapping:
+          Windows: 0.5
+          Android: 0.4
+          iOS: 0.2
+          macOS: 0.2
+          Linux: 0.6
+        notes: "Some OS have higher fraud rates"
+      
+      - name: browser_risk_score
+        description: "Risk score based on browser"
+        type: numerical
+        transform: "mapping"
+        source_column: "browser_family"
+        mapping:
+          Chrome: 0.3
+          Safari: 0.2
+          Firefox: 0.3
+          Edge: 0.3
+          "Internet Explorer": 0.8
+        notes: "Older browsers are higher risk"
+      
+      - name: is_mobile
+        description: "Whether transaction from mobile device"
+        type: binary
+        transform: "is_in"
+        source_column: "device_type"
+        values: ["mobile", "tablet"]
+        notes: "Mobile vs desktop"
+      
+      - name: is_new_device
+        description: "Flag for first use of this device"
+        type: binary
+        transform: "is_first_occurrence"
+        source_column: "device_id"
+        group_by: "customer_id"
+        notes: "New devices are higher risk"
+      
+      - name: device_age_days
+        description: "Days since device first seen"
+        type: numerical
+        transform: "time_diff"
+        source_column: "transaction_date"
+        reference_column: "first_seen_date"
+        diff_unit: "days"
+        notes: "How long has this device been used"
+    
+    # Device behavior features
+    device_behavior:
+      - name: devices_per_customer
+        description: "Number of devices used by customer"
+        type: numerical
+        transform: "rolling_nunique"
+        source_column: "device_id"
+        group_by: "customer_id"
+        window: "30D"
+        notes: "Device diversity"
+      
+      - name: device_switches_24h
+        description: "Number of device switches in 24h"
+        type: numerical
+        transform: "rolling_changes"
+        source_column: "device_id"
+        group_by: "customer_id"
+        window: "24H"
+        notes: "How often they change devices"
+      
+      - name: customers_per_device
+        description: "Number of customers using this device"
+        type: numerical
+        transform: "rolling_nunique"
+        source_column: "customer_id"
+        group_by: "device_id"
+        window: "30D"
+        notes: "Device sharing - suspicious if many users"
+      
+      - name: device_fraud_rate
+        description: "Historical fraud rate for this device"
+        type: numerical
+        transform: "rolling_mean"
+        source_column: "is_fraud"
+        group_by: "device_id"
+        window: "90D"
+        notes: "Device's fraud history"
+      
+      - name: device_risk_increase
+        description: "Increase in device risk over time"
+        type: numerical
+        transform: "trend"
+        source_column: "device_risk_score"
+        group_by: "device_id"
+        window: "30D"
+        notes: "Is device becoming riskier"
+    
+    # Connection features
+    connection_features:
+      - name: is_proxy
+        description: "Whether IP is a proxy/VPN"
+        type: binary
+        transform: "direct"
+        source_column: "is_proxy"
+        notes: "Proxy connections are high risk"
+      
+      - name: is_tor
+        description: "Whether connection is via Tor"
+        type: binary
+        transform: "direct"
+        source_column: "is_tor"
+        notes: "Tor connections are very high risk"
+      
+      - name: ip_risk_score
+        description: "Risk score for IP address"
+        type: numerical
+        transform: "direct"
+        source_column: "ip_risk_score"
+        mapping_file: "data/external/ip_risk_scores.csv"
+        range: [0, 1]
+      
+      - name: ip_fraud_history
+        description: "Historical fraud rate for this IP"
+        type: numerical
+        transform: "rolling_mean"
+        source_column: "is_fraud"
+        group_by: "ip_address"
+        window: "90D"
+      
+      - name: ip_geolocation_match
+        description: "Whether IP geolocation matches transaction location"
+        type: binary
+        transform: "comparison"
+        source_column: "country_code"
+        reference_column: "ip_country"
+        comparison: "=="
+        notes: "IP should match transaction location"
+  
+  # ====================================================================
+  # Graph Features
+  # Network-based features for fraud detection
+  # ====================================================================
+  graph_features:
+    
+    # Customer network features
+    customer_network:
+      - name: customer_degree
+        description: "Number of connections in fraud network"
+        type: numerical
+        transform: "graph_degree"
+        graph_type: "customer_customer"
+        edge_type: "shared_device"
+        notes: "How many other customers share devices"
+      
+      - name: customer_centrality
+        description: "Betweenness centrality in fraud network"
+        type: numerical
+        transform: "graph_centrality"
+        graph_type: "customer_customer"
+        centrality_type: "betweenness"
+        notes: "How central is customer in fraud network"
+      
+      - name: fraud_community_score
+        description: "Likelihood of being in fraud community"
+        type: numerical
+        transform: "community_detection"
+        graph_type: "customer_customer"
+        algorithm: "louvain"
+        property: "fraud_ratio"
+        notes: "Community's fraud rate"
+      
+      - name: distance_to_fraudsters
+        description: "Graph distance to known fraudsters"
+        type: numerical
+        transform: "shortest_path"
+        graph_type: "customer_customer"
+        target_nodes: "known_fraudsters"
+        notes: "How connected to fraudsters"
+    
+    # Merchant network features
+    merchant_network:
+      - name: merchant_degree
+        description: "Number of connections in fraud network"
+        type: numerical
+        transform: "graph_degree"
+        graph_type: "merchant_merchant"
+        edge_type: "shared_customer"
+        notes: "Merchants connected via shared customers"
+      
+      - name: merchant_risk_propagation
+        description: "Risk propagated from connected merchants"
+        type: numerical
+        transform: "label_propagation"
+        graph_type: "merchant_merchant"
+        seed_labels: "merchant_risk_score"
+        iterations: 5
+        notes: "Risk flows through merchant network"
+    
+    # Device network features
+    device_network:
+      - name: device_centrality
+        description: "Centrality in device network"
+        type: numerical
+        transform: "graph_centrality"
+        graph_type: "device_device"
+        edge_type: "shared_customer"
+        notes: "Devices used by many customers"
+      
+      - name: device_bridge_score
+        description: "Whether device bridges different customer groups"
+        type: numerical
+        transform: "bridge_score"
+        graph_type: "device_device"
+        notes: "Devices connecting otherwise separate groups"
+    
+    # Bipartite network features
+    bipartite_features:
+      - name: customer_merchant_diversity
+        description: "Diversity of customer-merchant connections"
+        type: numerical
+        transform: "bipartite_diversity"
+        left_nodes: "customer_id"
+        right_nodes: "merchant_id"
+        metric: "shannon_entropy"
+      
+      - name: device_merchant_concentration
+        description: "Concentration of device-merchant connections"
+        type: numerical
+        transform: "bipartite_concentration"
+        left_nodes: "device_id"
+        right_nodes: "merchant_id"
+        metric: "herfindahl_index"
+
+# --------------------------------------------------------------------
+# Feature Selection Configuration
+# How to select most important features
+# --------------------------------------------------------------------
+feature_selection:
+  
+  # Feature selection methods
+  methods:
+    - variance_threshold
+    - correlation_filter
+    - mutual_information
+    - recursive_feature_elimination
+    - feature_importance
+    - l1_regularization
+  
+  # Variance threshold
+  variance_threshold:
+    threshold: 0.01                                   # Remove low variance features
+    normalize: true
+  
+  # Correlation filter
+  correlation_filter:
+    threshold: 0.95                                   # Remove highly correlated features
+    method: "pearson"
+    keep: "first"                                     # Keep first in each group
+  
+  # Mutual information
+  mutual_information:
+    n_features: 50                                     # Keep top 50 features
+    discrete_features: "auto"
+    
+  # Recursive feature elimination
+  rfe:
+    n_features: 30                                      # Keep top 30 features
+    step: 5                                              # Remove 5 at a time
+    estimator: "xgboost"
+    cv_folds: 5
+  
+  # Feature importance
+  feature_importance:
+    method: "permutation"                               # Permutation importance
+    n_repeats: 10
+    random_state: 42
+    threshold: 0.001                                     # Min importance to keep
+  
+  # L1 regularization
+  l1_regularization:
+    estimator: "logistic_regression"
+    C: 1.0                                                # Inverse regularization
+    penalty: "l1"
+    solver: "saga"
+    max_features: 50
+
+# --------------------------------------------------------------------
+# Feature Store Configuration
+# How to store and serve features
+# --------------------------------------------------------------------
+feature_store:
+  
+  # Online feature store (for real-time inference)
+  online:
+    type: "redis"
+    host: "localhost"
+    port: 6379
+    db: 0
+    ttl: 86400                                            # 24 hours
+    
+    # Feature groups with TTLs
+    feature_ttls:
+      customer_features: 604800                            # 7 days
+      device_features: 2592000                             # 30 days
+      transaction_features: 86400                          # 1 day
+  
+  # Offline feature store (for training)
+  offline:
+    type: "parquet"
+    path: "data/features/"
+    format: "parquet"
+    partition_columns: ["year", "month"]
+    
+    # Backup to cloud storage
+    backup:
+      enabled: true
+      provider: "s3"
+      bucket: "fraudguard-features"
+      path: "features/"
+      region: "us-west-2"
+  
+  # Feature registry
+  registry:
+    type: "mlflow"
+    tracking_uri: "http://localhost:5000"
+    experiment_name: "fraud_detection_features"
+    register_features: true

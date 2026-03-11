@@ -1,0 +1,440 @@
+# configs/preprocessing_config.yaml
+# =====================================================
+# VeritasFinancial - Banking Fraud Detection System
+# Data Preprocessing Configuration
+# Defines all data cleaning and transformation steps
+# =====================================================
+
+# --------------------------------------------------------------------
+# Missing Value Handling
+# Strategies for handling missing data
+# --------------------------------------------------------------------
+missing_value_handling:
+  
+  # Global settings
+  global_strategy: "smart"                          # Intelligent handling per column type
+  create_indicator: true                             # Create missing value indicators
+  
+  # Numerical column handling
+  numerical:
+    default_strategy: "median"                       # Impute with median
+    fallback_strategy: "constant"                     # Fallback if median fails
+    constant_value: 0                                  # Constant for fallback
+    
+    # Column-specific strategies
+    by_column:
+      amount:
+        strategy: "median"                            # Median amount
+        group_by: ["merchant_category", "country_code"]  # Group-based imputation
+      
+      credit_score:
+        strategy: "mean"                              # Mean credit score
+        group_by: ["income_bracket", "age_group"]       # Impute by demographics
+      
+      account_balance:
+        strategy: "knn"                               # KNN imputation
+        n_neighbors: 5
+        weights: "distance"
+      
+      location_latitude:
+        strategy: "mode"                              # Most common location
+        group_by: ["country_code", "city"]
+    
+  # Categorical column handling
+  categorical:
+    default_strategy: "mode"                          # Impute with most frequent
+    unknown_category: "UNKNOWN"                        # Category for missing
+    
+    by_column:
+      merchant_category:
+        strategy: "mode"
+        group_by: ["merchant_id"]
+      
+      device_id:
+        strategy: "constant"
+        constant_value: "NO_DEVICE"
+      
+      ip_address:
+        strategy: "constant"
+        constant_value: "0.0.0.0"
+  
+  # DateTime column handling
+  datetime:
+    default_strategy: "forward_fill"                   # Forward fill within group
+    fill_limit: 24                                      # Max hours to forward fill
+    
+    by_column:
+      reported_date:
+        strategy: "constant"
+        constant_value: "1900-01-01"
+  
+  # Missing value indicators
+  indicators:
+    create_for_all: false
+    columns: ["device_id", "ip_address", "location_latitude"]
+    suffix: "_missing"
+
+# --------------------------------------------------------------------
+# Outlier Detection and Treatment
+# Methods to identify and handle outliers
+# --------------------------------------------------------------------
+outlier_handling:
+  
+  # Detection methods
+  detection_methods:
+    - iqr                                            # Interquartile range
+    - zscore                                          # Z-score method
+    - modified_zscore                                  # Robust z-score
+    - isolation_forest                                 # ML-based detection
+  
+  # IQR method settings
+  iqr:
+    multiplier: 1.5                                    # Standard IQR multiplier
+    multiplier_extreme: 3.0                            # Extreme outliers
+    
+    by_column:
+      amount:
+        multiplier: 2.0                                # More sensitive for amount
+        treat_extreme: true
+      transaction_count:
+        multiplier: 2.5
+      account_balance:
+        multiplier: 2.0
+  
+  # Z-score method settings
+  zscore:
+    threshold: 3                                       # Standard threshold
+    threshold_extreme: 5
+  
+  modified_zscore:
+    threshold: 3.5                                     # More robust
+  
+  # Isolation Forest settings
+  isolation_forest:
+    contamination: 0.01                                # Expected outlier ratio
+    n_estimators: 100
+    max_samples: "auto"
+    random_state: 42
+  
+  # Outlier treatment
+  treatment:
+    default_action: "cap"                              # Cap extreme values
+    
+    by_column:
+      amount:
+        action: "winsorize"                            # Winsorization
+        limits: [0.01, 0.99]                           # Cap at 1st and 99th percentiles
+      
+      credit_score:
+        action: "clip"                                 # Clip to domain bounds
+        min: 300
+        max: 850
+      
+      transaction_count:
+        action: "remove"                               # Remove outlier transactions
+        max_percentage: 0.01                            # Remove up to 1% of data
+      
+      velocity_metrics:
+        action: "transform"                            # Apply transformation
+        transform: "log1p"                              # Log transformation
+      
+      time_gap:
+        action: "winsorize"
+        limits: [0.01, 0.95]                           # Cap upper tail only
+
+# --------------------------------------------------------------------
+# Scaling and Normalization
+# Methods to scale numerical features
+# --------------------------------------------------------------------
+scaling:
+  
+  # Default scaling method
+  default_method: "robust"                             # Robust scaling for outliers
+  
+  # Available scaling methods
+  methods:
+    standard:                                          # Standardization (mean=0, std=1)
+      with_mean: true
+      with_std: true
+    
+    robust:                                            # Robust scaling (median, IQR)
+      with_centering: true
+      with_scaling: true
+      quantile_range: [25.0, 75.0]
+    
+    minmax:                                            # Min-max scaling [0, 1]
+      feature_range: [0, 1]
+    
+    maxabs:                                            # Max absolute scaling [-1, 1]
+      feature_range: [-1, 1]
+    
+    quantile:                                          # Quantile transformation
+      n_quantiles: 1000
+      output_distribution: "uniform"
+    
+    power:                                             # Power transformation
+      method: "yeo-johnson"                            # Yeo-Johnson (handles negative)
+      standardize: true
+  
+  # Column-specific scaling
+  by_column:
+    amount:
+      method: "robust"
+      quantile_range: [10.0, 90.0]                     # More robust for amount
+    
+    credit_score:
+      method: "minmax"
+      feature_range: [0, 1]
+    
+    account_balance:
+      method: "power"                                  # Power transform for skewed
+      method_params:
+        method: "yeo-johnson"
+    
+    velocity_features:
+      method: "standard"
+    
+    distance_features:
+      method: "robust"
+    
+    time_features:
+      method: "minmax"
+      feature_range: [-1, 1]                            # Scale to [-1, 1] for cyclical features
+
+# --------------------------------------------------------------------
+# Encoding Methods
+# Handling categorical variables
+# --------------------------------------------------------------------
+encoding:
+  
+  # Default encoding for categoricals
+  default_method: "target"                             # Target encoding
+  
+  # Available encoding methods
+  methods:
+    onehot:                                            # One-hot encoding
+      max_categories: 50                                # Max categories to encode
+      min_frequency: 0.01                               # Min frequency to include
+      handle_unknown: "ignore"
+      drop: "first"                                      # Drop first to avoid multicollinearity
+    
+    label:                                             # Label encoding
+      handle_unknown: "use_encoded_value"
+      unknown_value: -1
+    
+    ordinal:                                           # Ordinal encoding
+      handle_unknown: "use_encoded_value"
+      unknown_value: -1
+      categories: "auto"
+    
+    target:                                            # Target encoding
+      smoothing: 10                                     # Smoothing factor
+      min_samples_leaf: 100                             # Min samples per category
+      cv_folds: 5                                        # Cross-validation folds
+    
+    frequency:                                         # Frequency encoding
+      normalize: true                                    # Use frequencies
+    
+    binary:                                            # Binary encoding
+      handle_unknown: "indicator"
+    
+    hash:                                              # Hashing encoding
+      n_components: 16                                   # Number of hash features
+  
+  # Column-specific encoding
+  by_column:
+    merchant_category:
+      method: "target"
+      smoothing: 20
+      min_samples_leaf: 50
+    
+    country_code:
+      method: "frequency"
+    
+    transaction_type:
+      method: "onehot"
+      max_categories: 10
+    
+    channel:
+      method: "onehot"
+    
+    device_type:
+      method: "target"
+    
+    customer_segment:
+      method: "ordinal"
+      categories: ["BRONZE", "SILVER", "GOLD", "PLATINUM"]
+    
+    hour_of_day:
+      method: "cyclical"                                 # Custom cyclical encoding
+      encoding_type: "sin_cos"
+    
+    day_of_week:
+      method: "cyclical"
+      encoding_type: "sin_cos"
+  
+  # High cardinality handling
+  high_cardinality:
+    threshold: 100                                      # Columns with >100 categories
+    fallback_method: "target"                           # Use target encoding
+    rare_category_threshold: 0.01                        # Categories <1% -> "RARE"
+    rare_category_name: "RARE"
+
+# --------------------------------------------------------------------
+# DateTime Feature Extraction
+# Creating features from datetime columns
+# --------------------------------------------------------------------
+datetime_features:
+  
+  # Time-based features
+  time_features:
+    extract_components: true                            # Extract date components
+    
+    components:
+      - year
+      - month
+      - day
+      - hour
+      - minute
+      - dayofweek
+      - dayofyear
+      - weekofyear
+      - quarter
+      - is_weekend
+      - is_month_start
+      - is_month_end
+      - is_quarter_start
+      - is_quarter_end
+      - is_year_start
+      - is_year_end
+    
+    # Cyclical encoding for time
+    cyclical_encoding:
+      hour: [24]                                        # Period for hour
+      dayofweek: [7]                                    # Period for day of week
+      month: [12]                                       # Period for month
+      dayofyear: [365]                                  # Period for day of year
+    
+    # Time gaps
+    time_gaps:
+      columns:
+        - transaction_date
+        - last_transaction_date
+        - account_open_date
+      gap_units: ["hours", "days", "weeks"]
+  
+  # Business time features
+  business_features:
+    is_business_hours: true                             # 9 AM - 5 PM
+    is_after_hours: true                                 # After 5 PM
+    is_late_night: true                                   # 12 AM - 5 AM
+    is_weekend: true
+    is_holiday: true
+    holiday_file: "data/external/holidays.csv"
+  
+  # Seasonal features
+  seasonal_features:
+    - season                                             # Winter, Spring, Summer, Fall
+    - tax_season                                          # January-April
+    - holiday_season                                      # November-December
+    - summer_vacation                                      # June-August
+
+# --------------------------------------------------------------------
+# Aggregation Features
+# Creating aggregated features
+# --------------------------------------------------------------------
+aggregation_features:
+  
+  # Customer-based aggregations
+  customer_aggregates:
+    group_by: ["customer_id"]
+    windows: ["1H", "24H", "7D", "30D"]
+    
+    metrics:
+      - {column: "amount", functions: ["count", "sum", "mean", "std", "min", "max"]}
+      - {column: "is_fraud", functions: ["sum", "mean"]}
+      - {column: "transaction_type", functions: ["nunique"]}
+      - {column: "merchant_category", functions: ["nunique"]}
+      - {column: "country_code", functions: ["nunique"]}
+      - {column: "device_id", functions: ["nunique"]}
+    
+    # Rolling statistics
+    rolling:
+      amount:
+        windows: [3, 5, 10]                             # Last N transactions
+        functions: ["mean", "std", "skew"]
+      time_gap:
+        windows: [3, 5, 10]
+        functions: ["mean", "std"]
+  
+  # Merchant-based aggregations
+  merchant_aggregates:
+    group_by: ["merchant_id"]
+    windows: ["7D", "30D", "90D"]
+    
+    metrics:
+      - {column: "amount", functions: ["mean", "std"]}
+      - {column: "is_fraud", functions: ["mean"]}
+      - {column: "customer_id", functions: ["nunique"]}
+  
+  # Device-based aggregations
+  device_aggregates:
+    group_by: ["device_id"]
+    windows: ["1H", "24H", "7D"]
+    
+    metrics:
+      - {column: "amount", functions: ["sum", "mean"]}
+      - {column: "is_fraud", functions: ["sum"]}
+      - {column: "customer_id", functions: ["nunique"]}
+      - {column: "ip_address", functions: ["nunique"]}
+
+# --------------------------------------------------------------------
+# Data Splitting Strategy
+# How to split data for training, validation, and testing
+# --------------------------------------------------------------------
+data_splitting:
+  
+  # Split ratios
+  splits:
+    train: 0.70                                         # 70% for training
+    validation: 0.15                                     # 15% for validation
+    test: 0.15                                           # 15% for testing
+  
+  # Split method
+  method: "stratified"                                  # Maintain class distribution
+  
+  # Stratification columns
+  stratify_by:
+    - is_fraud                                          # Balance fraud/non-fraud
+    - customer_segment                                   # Balance customer segments
+    - transaction_type                                   # Balance transaction types
+  
+  # Time-based splitting (for temporal validation)
+  time_based_split:
+    enabled: true
+    split_date: "2024-06-01"                             # Split point in time
+    validation_days: 30                                   # 30 days for validation
+    test_days: 30                                         # 30 days for testing
+  
+  # Cross-validation settings
+  cross_validation:
+    enabled: true
+    method: "stratified_kfold"
+    n_folds: 5
+    shuffle: true
+    random_state: 42
+    
+    # Time series cross-validation
+    time_series_cv:
+      enabled: true
+      method: "expanding_window"
+      initial_window: 180                                 # Days in first window
+      step: 30                                             # Days to step
+      max_windows: 10
+  
+  # Data leakage prevention
+  leakage_prevention:
+    enabled: true
+    remove_overlapping: true
+    time_gap_days: 1                                      # Gap between train/val/test
+    group_by: ["customer_id"]                              # Same customer in same split

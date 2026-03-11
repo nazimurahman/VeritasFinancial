@@ -1,0 +1,357 @@
+# configs/data_config.yaml
+# =====================================================
+# VeritasFinancial - Banking Fraud Detection System
+# Data Configuration File
+# This file defines all data sources, schemas, and data quality rules
+# =====================================================
+
+# --------------------------------------------------------------------
+# Data Sources Configuration
+# Defines where and how to access different data sources
+# --------------------------------------------------------------------
+data_sources:
+  
+  # Primary transaction data source
+  transactions:
+    type: postgresql                # Database type (postgresql, mysql, bigquery, etc.)
+    connection_string: "postgresql://user:password@localhost:5432/banking_db"
+    table: transaction_table        # Source table name
+    schema: public                   # Database schema
+    batch_size: 10000                 # Number of records to fetch in each batch
+    date_column: transaction_date     # Column used for time-based partitioning
+    partition_column: account_id       # Column used for distributed processing
+    
+    # Columns to fetch from the source
+    columns:
+      - transaction_id                # Unique identifier for each transaction
+      - account_id                    # Customer account identifier
+      - transaction_date               # Date and time of transaction
+      - amount                        # Transaction amount in original currency
+      - currency                       # Currency code (USD, EUR, etc.)
+      - transaction_type               # Type (purchase, transfer, withdrawal)
+      - merchant_id                    # Unique merchant identifier
+      - merchant_category               # MCC code (merchant category)
+      - channel                        # Transaction channel (online, POS, mobile)
+      - device_id                       # Device identifier for online transactions
+      - ip_address                       # IP address for online transactions
+      - location_latitude               # Latitude of transaction location
+      - location_longitude               # Longitude of transaction location
+      - country_code                     # Country where transaction occurred
+      - city                              # City where transaction occurred
+      - is_fraud                          # Label (0 = legitimate, 1 = fraud)
+      - fraud_reason_code                   # Reason code if fraud (if available)
+      - reported_date                        # Date when fraud was reported (if applicable)
+    
+    # Data type specifications for each column
+    dtypes:
+      transaction_id: string
+      account_id: string
+      transaction_date: datetime
+      amount: float64
+      currency: category
+      transaction_type: category
+      merchant_id: string
+      merchant_category: int32
+      channel: category
+      device_id: string
+      ip_address: string
+      location_latitude: float32
+      location_longitude: float32
+      country_code: category
+      city: string
+      is_fraud: int8
+      fraud_reason_code: string
+      reported_date: datetime
+    
+    # Index columns for optimized queries
+    index_columns:
+      - transaction_id
+      - transaction_date
+    
+    # Partitioning configuration for large datasets
+    partitioning:
+      enabled: true
+      column: transaction_date
+      granularity: monthly              # Partition by month
+    
+  # Customer profile data source
+  customers:
+    type: api                          # REST API endpoint
+    endpoint: "https://api.bank.com/v1/customers"
+    auth_type: oauth2                   # Authentication type
+    api_key_env: "CUSTOMER_API_KEY"      # Environment variable for API key
+    cache_ttl: 3600                      # Cache time-to-live in seconds
+    
+    # Request parameters
+    parameters:
+      limit: 1000                        # Records per request
+      fields: [
+        "customer_id",
+        "account_open_date",
+        "customer_age",
+        "income_bracket",
+        "credit_score",
+        "account_balance",
+        "account_status",
+        "customer_segment",
+        "kyc_level",
+        "risk_rating",
+        "total_transactions_30d",
+        "avg_transaction_amount_30d"
+      ]
+    
+    # Response mapping (API response field to internal field name)
+    field_mapping:
+      id: customer_id
+      open_date: account_open_date
+      age: customer_age
+      income: income_bracket
+      credit: credit_score
+      balance: account_balance
+      status: account_status
+      segment: customer_segment
+      kyc: kyc_level
+      risk: risk_rating
+      tx_count_30d: total_transactions_30d
+      avg_amount_30d: avg_transaction_amount_30d
+  
+  # Device fingerprint data source
+  devices:
+    type: mongodb                       # NoSQL database
+    connection_string: "mongodb://localhost:27017/"
+    database: device_fingerprints
+    collection: device_profiles
+    
+    # Query filter
+    filter:
+      active: true
+      last_seen: { $gte: "2024-01-01" }
+    
+    fields:
+      - device_id
+      - device_type                       # mobile, desktop, tablet
+      - os_family                          # Windows, Android, iOS, macOS
+      - os_version
+      - browser_family                      # Chrome, Safari, Firefox
+      - browser_version
+      - screen_resolution
+      - timezone
+      - language
+      - hardware_concurrency
+      - first_seen_date
+      - last_seen_date
+      - total_transactions
+      - fraud_count
+      - risk_score
+      - is_emulator
+      - is_proxy
+      - is_vpn
+  
+  # Merchant reference data
+  merchants:
+    type: csv                            # CSV file source
+    path: "data/external/merchant_data.csv"
+    delimiter: ","
+    header: 0                             # Row number with column names
+    encoding: utf-8
+    
+    columns:
+      - merchant_id
+      - merchant_name
+      - merchant_category_code
+      - merchant_category_description
+      - merchant_country
+      - merchant_risk_level                 # Low, Medium, High
+      - historical_fraud_rate
+      - avg_transaction_amount
+      - mcc_risk_score                      # Risk score based on MCC
+      - is_high_risk_mcc
+      - is_international
+      - year_established
+      - total_annual_volume
+      - chargeback_rate
+
+# --------------------------------------------------------------------
+# Data Quality Rules
+# Defines validation rules for data quality checks
+# --------------------------------------------------------------------
+data_quality:
+  
+  # Missing value handling
+  missing_values:
+    threshold: 0.3                        # Maximum allowed missing ratio (30%)
+    strategy: "by_column"                   # Handle missing values per column
+    
+    # Column-specific missing value strategies
+    column_strategies:
+      amount:
+        max_missing: 0.01                   # Max 1% missing allowed
+        imputation_method: "median"          # Impute with median
+      merchant_id:
+        max_missing: 0.05
+        imputation_method: "mode"
+      device_id:
+        max_missing: 0.10
+        imputation_method: "unknown"
+      ip_address:
+        max_missing: 0.15
+        imputation_method: "0.0.0.0"
+  
+  # Outlier detection settings
+  outliers:
+    method: "iqr"                          # Interquartile range method
+    iqr_multiplier: 1.5                     # Standard outlier threshold
+    winsorize_limits: [0.01, 0.99]           # Cap extremes at 1st and 99th percentiles
+    
+    # Column-specific outlier handling
+    column_outliers:
+      amount:
+        method: "modified_zscore"
+        threshold: 3.5
+        action: "cap"                         # Cap extreme values
+      credit_score:
+        method: "domain"                       # Domain knowledge based
+        min_value: 300
+        max_value: 850
+        action: "clip"
+  
+  # Data type validation
+  data_types:
+    strict_mode: true                       # Raise error if type mismatch
+    coerce_numeric: false                    # Don't force numeric conversion
+    
+    # Custom type conversions
+    custom_conversions:
+      transaction_date:
+        format: "%Y-%m-%d %H:%M:%S"
+        errors: "coerce"
+      amount:
+        dtype: "float64"
+        errors: "raise"
+  
+  # Duplicate detection
+  duplicates:
+    check_columns: ["transaction_id"]        # Unique identifier columns
+    deduplicate: true                        # Remove duplicates
+    keep: "first"                             # Keep first occurrence
+    subset_checks:
+      - columns: ["account_id", "transaction_date", "amount"]
+        max_duplicates: 3                      # Max allowed similar transactions
+  
+  # Range validations
+  range_validations:
+    amount:
+      min: 0.01
+      max: 1000000
+    credit_score:
+      min: 300
+      max: 850
+    customer_age:
+      min: 18
+      max: 120
+    account_balance:
+      min: -10000                              # Allow overdraft
+      max: 10000000
+
+# --------------------------------------------------------------------
+# Validation Rules
+# Business logic validation rules
+# --------------------------------------------------------------------
+validation_rules:
+  
+  # Amount validation rules
+  amount:
+    min: 0.01                                  # Minimum transaction amount
+    max: 1000000                                # Maximum transaction amount
+    allowed_currencies: ["USD", "EUR", "GBP", "JPY", "CAD"]
+    
+    # Currency-specific limits
+    currency_limits:
+      USD:
+        min: 0.01
+        max: 1000000
+      EUR:
+        min: 0.01
+        max: 900000
+      JPY:
+        min: 1
+        max: 100000000
+  
+  # Transaction time validation
+  transaction_time:
+    max_future_days: 1                          # Can't be more than 1 day in future
+    max_past_days: 365                           # Can't be more than 1 year in past
+    business_hours_only: false                    # Allow outside business hours
+  
+  # Geographic validation
+  country_codes:
+    source: "iso_3166_1_alpha_2"                 # ISO 3166-1 alpha-2 codes
+    allow_unknown: false
+    file_path: "data/external/iso_country_codes.csv"
+  
+  # Device validation
+  device:
+    max_transactions_per_day: 1000               # Max transactions from one device
+    min_device_age_days: 0                        # New devices allowed
+    allow_emulator: false                         # Block emulators
+    allow_proxy: false                             # Block proxy connections
+  
+  # Merchant validation
+  merchant:
+    require_registered: true                       # Merchant must be in database
+    blacklisted_mcc: [4829, 6012, 6051]            # High-risk MCC codes
+    high_risk_countries: ["XX", "YY", "ZZ"]         # Blocked countries
+
+# --------------------------------------------------------------------
+# Data Partitioning Strategy
+# How to partition data for efficient processing
+# --------------------------------------------------------------------
+partitioning:
+  enabled: true
+  strategy: "time_based"                           # Time-based partitioning
+  column: "transaction_date"
+  
+  # Partition by date parts
+  partition_levels:
+    - year
+    - month
+    - day
+  
+  # File-based partitioning (for local storage)
+  file_based:
+    base_path: "data/processed/"
+    format: "parquet"
+    partition_naming: "year={year}/month={month}/day={day}"
+  
+  # Database partitioning
+  database_partitioning:
+    enabled: true
+    partition_type: "range"
+    partition_column: "transaction_date"
+    partition_interval: "monthly"                  # New partition each month
+    retention_period: "7 years"                      # Keep data for 7 years
+
+# --------------------------------------------------------------------
+# Data Sampling Configuration
+# For development and testing
+# --------------------------------------------------------------------
+sampling:
+  development:
+    enabled: true
+    method: "random"                               # Random sampling
+    fraction: 0.01                                   # 1% of data for dev
+    seed: 42
+    stratify_by: "is_fraud"                          # Maintain class balance
+  
+  testing:
+    enabled: true
+    method: "stratified"
+    fraction: 0.10                                   # 10% for testing
+    seed: 42
+    stratify_by: "is_fraud"
+  
+  validation:
+    enabled: true
+    method: "time_based"                             # Time-based split
+    split_date: "2024-01-01"                          # Use data after this for validation
+    validation_size: 0.15                              # 15% for validation
